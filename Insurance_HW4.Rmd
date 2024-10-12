@@ -1,0 +1,1611 @@
+---
+title: "GROUP 2 HW4: Insurance - Data 621 Assignment 4"
+author: 'GROUP 2 MEMBERS: Banu Boopalan, Gregg Maloy, Alexander Moyse, Umais Siddiqui'
+date: "11-12-2024"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    df_print: tibble
+    toc: true
+    toc_depth: 2
+  html_document:
+    code_folding: hide
+    df_print: paged
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    theme: yeti
+    highlight: pygments
+  word_document:
+    toc: true
+    toc_depth: '2'
+---
+<STYLE>
+table {
+    border: 1px solid black;
+}
+th {
+    background-color: rgb(204, 114, 12);
+    color: black;
+    font-weight: bold;
+    padding: 20px 30px;
+}
+tr:nth-child(even) {
+    background-color: rgb(220,220,220);
+}
+tr:nth-child(odd) {
+    background-color: rgb(184, 174, 174);
+    
+}
+</STYLE>
+
+## Assignment Introduction
+
+We have read in the 2 datasets provided as part of this project from Github.\
+
+Our goal for this project is to analyze 8000 records of a customer of an insurance company.\ 
+
+Once have fit the data, we can then run and test on the evaluation dataset provided, we will analyze model validity and performance and report model that can be selected as the best fit for the data. Shown below is an image all the variables and their definitions.\
+
+
+
+
+```{r setup}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = FALSE)
+```
+
+
+```{r setup1 }
+
+library(kableExtra)
+library(tidyverse)
+library(tidyr)
+library(forecast)
+library(cowplot)
+#install.packages("car")
+library(naniar)
+library(Seurat)
+library(skimr)
+library(PerformanceAnalytics)
+library(corrplot)
+library(mice)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+library(tidyr)
+library(MASS)# For stepAIC (Stepwise selection)
+library(caret)  # For splitting data and cross-validation
+library(leaps)
+library(car)
+
+
+moneyball_tdata <- read.csv("https://raw.githubusercontent.com/BanuB/CUNY-DATA-621/refs/heads/main/moneyball-training-data.csv",stringsAsFactors = F,header=TRUE)
+
+moneyball_testdta <- read.csv("https://raw.githubusercontent.com/BanuB/CUNY-DATA-621/refs/heads/main/moneyball-evaluation-data.csv",stringsAsFactors = F,header=TRUE)
+#knitr::include_graphics("Definition.png")
+
+```
+
+
+
+## Data Exploration {.tabset}
+
+Describe the size and the variables in the moneyball training data set. 
+Consider that too much detail will cause a manager to lose interest while too little detail will make the manager consider that you aren’t doing your job. 
+Some suggestions are given below. Please do NOT treat this as a check list of things to do to complete the assignment. You should have your own thoughts on what to tell the boss. These are just ideas.\
+
+a. Mean / Standard Deviation / Median\
+b. Bar Chart or Box Plot of the data\
+c. Is the data correlated to the target variable (or to other variables?)\
+d. Are any of the variables missing and need to be imputed “fixed”?\
+
+### Explore DataSet & Review Missing Data
+
+This data set contains 2276 records and 17 variables in each record.\ 
+
+Each record represents a professional baseball team from the years 1871 to 2006 inclusive. Each record has the performance of the team for the given year, with all of the statistics adjusted to match the performance of a 162 game season.\
+
+Here we have used a few visualizations to summarize the variables that are missing data or have values 0's.\ 
+
+Following variables have the highest "NA" missing values which we can either ignore or consider for imputation. In this project our team have decided to proceed with imputation.Three other variables TEAM_BASERUN_SB, TEAM_BATTING_SO,TEAM_PITCHING_SO are all around 6% and 5% missing data respectively.\
+
+TEAM_BATTING_HBP (92%)\
+TEAM_BASERUN_CS	(34%)\
+TEAM_FIELDING_DP (13%)\ 
+
+We also have records with 0's.A potential option is transforming them by adding a constant.\ 
+
+A quick run down of statistics that we need to understand in the world of baseball. Some trivia, for a player, a .275 average is pretty good. However this means that the batter was successful just over 25% of the time. Nearly 73% of the time, they did not get a hit.\
+
+BA = batting average,\ 
+G = games played,\ 
+AB = at bats,\ 
+R = runs, \
+H = hits, \
+2B = doubles, \
+3B = triples, \
+HR = home runs, \
+RBI = runs batted in,\ 
+SB = stolen bases. \
+
+
+
+
+ 
+```{r Data Exploration}
+
+#Review the data
+skimr::skim(moneyball_tdata)
+
+
+#Identify columns with missing values
+gg_miss_upset(moneyball_tdata)
+gg_miss_var(moneyball_tdata, show_pct = TRUE)
+
+
+# Drop the Index column
+df <- moneyball_tdata %>%  dplyr::select(-INDEX)
+
+
+# #Analysis of Missing values on the original dataset without Mice imputation
+# missing <- colSums(df %>% sapply(is.na))
+# missing_pct <- round(missing / nrow(df) * 100, 2)
+# stack(sort(missing_pct, decreasing = TRUE))
+
+df %>% 
+  gather(variable, value) %>%
+  filter(is.na(value)) %>%
+  group_by(variable) %>%
+  tally() %>%
+  mutate(percent = n / nrow(df) * 100) %>%
+  mutate(percent = paste0(round(percent, ifelse(percent < 10, 1, 0)), "%")) %>%
+  arrange(desc(n)) %>%
+  rename(`Variable Missing Data` = variable,
+         `Number of Records` = n,
+         `Share of Total` = percent) %>%
+  kable() %>%
+  kable_styling()
+
+df %>% 
+  gather(variable, value) %>%
+  filter(value == 0) %>%
+  group_by(variable) %>%
+  tally() %>%
+  mutate(percent = n / nrow(df) * 100) %>%
+  mutate(percent = paste0(round(percent, ifelse(percent < 10, 1, 0)), "%")) %>%
+  arrange(desc(n)) %>%
+  rename(`Variable With Zeros` = variable,
+         `Number of Records` = n,
+         `Share of Total` = percent) %>%
+  kable() %>%
+  kable_styling()
+
+
+
+```
+
+
+### Review distributions
+
+The histogram distribution show kurtosis, specifically right skew in variables such as BASERUN_CS, BASERUN_SB, FIELDING_E, PITCHING_BB, PITCHING_H and PITCHING_SO. We may need to transform these to see if we can make them more of a normal curve prior to proceeding with the model build using the data.\ 
+
+BATTING_HR, PITCHING_HR and BATTING_SO have a bimodal data which may suggest a shift in the data represented within the dataset. Looking at quick qqplots of the bimodal variables confirms that these are not normal, however, HBP which has a large number of missing values does seem following along the line on the values represented. We can choose to keep this variable and impute the missing values rather than dropping it from the dataset. \
+
+TARGET WINS is normally distributed.\ 
+
+Boxplots reveal that there are many variables with outliers found in the distribution and as shown by the qqplot as well. These will have some impact on our model fit. We could potentially find leverage and influential points and remove them and rerun the model to determine during model build process.\
+
+
+```{r Data Exploration DIST}
+
+#Review the data
+#install.packages("ggcorrplot")
+library(ggcorrplot)
+
+# Look at distributions of the columns
+mt <- df %>% 
+  gather(key = 'variable', value = 'value')
+
+names(df)
+variable_names <- list(
+  "TARGET_WINS"      =  "TARGET_WINS"  
+  ,"TEAM_BATTING_H"   = "BATTING_H"
+  ,"TEAM_BATTING_2B"  = "BATTING_2B"
+  ,"TEAM_BATTING_3B"  = "BATTING_3B"
+  ,"TEAM_BATTING_HR"  = "BATTING_HR"
+  ,"TEAM_BATTING_BB"  = "BATTING_BB"
+  ,"TEAM_BATTING_SO"  = "BATTING_SO"
+  ,"TEAM_BASERUN_SB"  = "BASERUN_SB"
+  ,"TEAM_BASERUN_CS"  = "BASERUN_CS"
+  ,"TEAM_BATTING_HBP" = "BATTING_HBP"
+  ,"TEAM_PITCHING_H"  = "PITCHING_H"
+  ,"TEAM_PITCHING_HR" = "PITCHING_HR"
+  ,"TEAM_PITCHING_BB" = "PITCHING_BB"
+  ,"TEAM_PITCHING_SO" = "PITCHING_SO"
+  ,"TEAM_FIELDING_E"  = "FIELDING_E"
+  ,"TEAM_FIELDING_DP" = "FIELDING_DP"
+  
+)
+
+variable_labeller <- function(variable,value){
+  return(variable_names[value])
+}
+
+# Histogram plots of each variable
+
+mt %>% ggplot(., aes(value)) + 
+geom_density(fill = "lightgray", color="lightgray") + 
+facet_wrap(.~variable, scales='free',ncol=4,labeller=variable_labeller)
+
+# findoutlier <- function(x) {
+# return(x < quantile(x, .25,na.rm=TRUE) - 1.5*IQR(x,na.rm=TRUE) | x > quantile(x, .75,na.rm=TRUE) + 1.5*IQR(x,na.rm=TRUE))
+#  }
+# 
+# mtout <-mt %>%
+# group_by(variable) %>%
+# mutate(outlier = ifelse(findoutlier(value), value, NA))
+
+# Boxplot
+ggplot(mt, aes(factor(variable), value)) +
+  geom_boxplot() +
+#geom_text(aes(label=outlier), na.rm=TRUE, hjust=-.5)+
+ facet_wrap(. ~variable, scales='free', ncol=5,labeller = variable_labeller)
+
+# ggplot(stack(df), aes(x = ind, y = values)) + 
+#   geom_boxplot() +
+#    theme(legend.position="none") +
+#   theme(axis.text.x=element_text(angle=45, hjust=1))
+
+#stacked boxplot
+longdf <- df %>%
+  melt()
+
+longdf %>%
+  filter(complete.cases(.)) %>%
+  ggplot(aes(x= variable, y=value)) +
+  geom_boxplot(fill="lightgray") +
+  scale_y_log10() +
+  coord_flip() +
+  theme_minimal() +
+  labs(y="Value", x="variable",
+       title="Boxplot")
+
+#For Bimodal we want to understand qqplot.
+qqplot_BATTING_3B <- ggplot(df, aes(sample = TEAM_BATTING_3B)) +
+    stat_qq() + 
+    stat_qq_line() +
+    labs(title="BATTING_3B")
+
+
+qqplot_BATTING_HR <- ggplot(df, aes(sample = TEAM_BATTING_HR)) +
+    stat_qq() + 
+    stat_qq_line() +
+    labs(title="BATTING_HR")
+
+qqplot_BATTING_HBP <- ggplot(df, aes(sample = TEAM_BATTING_HBP)) +
+    stat_qq() + 
+    stat_qq_line() +
+    labs(title="BATTING_HBP")
+
+qqplot_BATTING_3B
+qqplot_BATTING_HR
+qqplot_BATTING_HBP
+
+```
+
+
+
+**CORRELATIONS REVIEW **
+
+
+Interesting Insights from the Correlation Plot\
+
+Positive Correlation Between TEAM_BATTING_H and TARGET_WINS (0.47)\
+<p>As expected, base hits (<code>TEAM_BATTING_H</code>) have a strong positive correlation with the number of wins. This makes sense because getting more base hits usually increases a team's chances of scoring and winning games.</p>
+
+Positive Correlation Between TEAM_BATTING_HR and TARGET_WINS (0.42)\
+<p>Homeruns (<code>TEAM_BATTING_HR</code>) are also strongly correlated with wins, indicating that teams with more homeruns tend to win more games. This confirms the importance of power-hitting in baseball.</p>
+
+Moderate Positive Correlation Between TEAM_BATTING_2B and TARGET_WINS (0.31)\
+<p>Doubles (<code>TEAM_BATTING_2B</code>) show a moderate positive correlation with wins, emphasizing that extra-base hits contribute significantly to a team's success.</p>
+
+Negative Correlation Between TEAM_BATTING_3B and TARGET_WINS (-0.12)
+<p>Surprisingly, triples (<code>TEAM_BATTING_3B</code>) show a slight negative correlation with wins. This could suggest that teams with more triples don't necessarily translate them into scoring, or that teams who hit fewer triples may rely on other strategies to win.</p>
+
+Positive Correlation Between TEAM_PITCHING_H and TARGET_WINS (0.47)
+<p>This is an unexpected result, as you would normally expect more hits allowed to lead to fewer wins. This could indicate that teams that allow more hits are able to compensate with other strong areas, like offensive production or good defense.</p>
+
+Negative Correlation Between TEAM_BATTING_SO and TARGET_WINS (-0.23)
+<p>Strikeouts by batters (<code>TEAM_BATTING_SO</code>) are negatively correlated with wins, meaning that teams that strike out more often tend to win less. This is expected, as striking out reduces a team's chances of getting on base and scoring.</p>
+
+Negative Correlation Between TEAM_FIELDING_E and TARGET_WINS (-0.39)
+<p>Fielding errors (<code>TEAM_FIELDING_E</code>) have a strong negative correlation with wins. Teams that commit more errors tend to lose more games, which is logical since errors typically give the opposing team more scoring opportunities.</p>
+
+Positive Correlation Between TEAM_BATTING_BB and TARGET_WINS (0.47)
+<p>Walks by batters (<code>TEAM_BATTING_BB</code>) have a significant positive impact on wins. This suggests that good plate discipline and the ability to draw walks help teams increase their chances of winning by getting more players on base.</p>
+
+TEAM_PITCHING_BB and TARGET_WINS (0.47)
+<p>Similar to hits allowed, walks allowed by pitchers (<code>TEAM_PITCHING_BB</code>) show a moderate positive correlation with wins. This is counterintuitive, as more walks generally put the team at a disadvantage. Further analysis might reveal that stronger teams manage to win despite allowing more walks.</p>
+
+
+ 
+```{r Data Exploration CORRE}
+
+#Review the data
+#install.packages("ggcorrplot")
+library(ggcorrplot)
+
+# Look at distributions of the columns
+mt <- df %>% 
+  gather(key = 'variable', value = 'value')
+
+names(df)
+variable_names <- list(
+  "TARGET_WINS"      =  "TARGET_WINS"  
+  ,"TEAM_BATTING_H"   = "BATTING_H"
+  ,"TEAM_BATTING_2B"  = "BATTING_2B"
+  ,"TEAM_BATTING_3B"  = "BATTING_3B"
+  ,"TEAM_BATTING_HR"  = "BATTING_HR"
+  ,"TEAM_BATTING_BB"  = "BATTING_BB"
+  ,"TEAM_BATTING_SO"  = "BATTING_SO"
+  ,"TEAM_BASERUN_SB"  = "BASERUN_SB"
+  ,"TEAM_BASERUN_CS"  = "BASERUN_CS"
+  ,"TEAM_BATTING_HBP" = "BATTING_HBP"
+  ,"TEAM_PITCHING_H"  = "PITCHING_H"
+  ,"TEAM_PITCHING_HR" = "PITCHING_HR"
+  ,"TEAM_PITCHING_BB" = "PITCHING_BB"
+  ,"TEAM_PITCHING_SO" = "PITCHING_SO"
+  ,"TEAM_FIELDING_E"  = "FIELDING_E"
+  ,"TEAM_FIELDING_DP" = "FIELDING_DP"
+  
+)
+
+variable_labeller <- function(variable,value){
+  return(variable_names[value])
+}
+
+# Select numeric columns only
+numeric_data <- df[sapply(df, is.numeric)]
+M<- cor(numeric_data,use="complete.obs")
+ # M %>% kable() %>%
+ #  kable_styling()
+
+ggcorrplot(M, type = "upper", outline.color = "white",
+           ggtheme = theme_classic,
+           #colors = c("#6D9EC1", "white", "#E46726"),
+           lab = TRUE, show.legend = FALSE, tl.cex = 8, lab_size = 3)
+           
+# Calculate the correlation matrix
+correlation_matrix <- cor(numeric_data, use="complete.obs")
+print(correlation_matrix)
+corrplot(correlation_matrix, method="circle")
+
+```
+
+**OUTLIERS**
+
+There are variables with outliers. For example, there are many pairs of variable types that have 0's recorded above (for example batting_HR and pitching_HR), since these are 0's, they could be considered outliers or they can be legitimate. In addition, a few variables have outliers  further distance away from the mean such as BATTING_3B, PITCHING_SO, PITCHING_BB.An observation is considered an outlier, if it is extreme, relative to other response values. In contrast, some records have extremely high or low values for the predictor variable, relative to the other values. These are referred to as high leverage observations.These can influence our model estimates and introduce bias. We could potentially calculate these points, remove them and refit the line and check our Rsquared value later on during the model build process.\
+
+Cook’s D measures how much the model coefficient estimates would change if an observation were to be removed from the data set.\
+
+There is one Cook’s D value for each observation used to fit the model. The higher the Cook’s D value, the greater the influence. Generally accepted rules of thumb are that Cook’s D values above 1.0 indicate influential values, and any values that stick out from the rest might also be influential.\
+
+```{r Data Exploration OUTLIERS}
+
+#Review the data
+#install.packages("ggcorrplot")
+library(ggcorrplot)
+
+
+#Scatterplot of variables with target wins
+df %>%
+  gather(variable, value, -TARGET_WINS) %>%
+  ggplot(., aes(value, TARGET_WINS)) + 
+  geom_point(fill = "lightblue", color="lightblue") + 
+  geom_smooth(method = "lm", se = FALSE, color = "black") + 
+  facet_wrap(~variable, scales ="free", ncol = 4) +
+  labs(x = element_blank(), y = "Wins")
+
+#Look at few variable distributions in depth
+
+df %>% 
+  ggplot(aes(TARGET_WINS)) + 
+  geom_histogram(bins = 50) +
+  geom_vline(aes(xintercept = mean(TARGET_WINS, na.rm = T)), col = "red", lty = 2) +
+  geom_vline(aes(xintercept = median(TARGET_WINS, na.rm = T)), col = "green", lty = 2) +
+  labs(x = element_blank(),
+       y = "Count",
+       title = "Distribution TARGET_WINS",
+       caption = "* Red line is the mean value and green is the median")
+
+df %>% 
+  ggplot(aes(TEAM_BATTING_3B)) + 
+  geom_histogram(bins = 50) +
+  geom_vline(aes(xintercept = mean(TEAM_BATTING_HBP, na.rm = T)), col = "red", lty = 2) +
+  geom_vline(aes(xintercept = median(TEAM_BATTING_HBP, na.rm = T)), col = "green", lty = 2) +
+  labs(x = element_blank(),
+       y = "Count",
+       title = "Distribution TEAM_BATTING_3B",
+       caption = "* Red line is the mean value and green is the median")
+
+df %>% 
+  ggplot(aes(TEAM_PITCHING_H)) + 
+  geom_histogram(bins = 50) +
+  geom_vline(aes(xintercept = mean(TEAM_PITCHING_H, na.rm = T)), col = "red", lty = 2) +
+  geom_vline(aes(xintercept = median(TEAM_PITCHING_H, na.rm = T)), col = "green", lty = 2) +
+  labs(x = element_blank(),
+       y = "Count",
+       title = "Distribution TEAM_PITCHING_H",
+       caption = "* Red line is the mean value and green is the median")
+
+df %>% 
+  ggplot(aes(TEAM_PITCHING_SO)) + 
+  geom_histogram(bins = 50) +
+  geom_vline(aes(xintercept = mean(TEAM_PITCHING_SO, na.rm = T)), col = "red", lty = 2) +
+  geom_vline(aes(xintercept = median(TEAM_PITCHING_SO, na.rm = T)), col = "green", lty = 2) +
+  labs(x = element_blank(),
+       y = "Count",
+       title = "Distribution TEAM_PITCHING_SO",
+       caption = "* Red line is the mean value and green is the median")
+
+df %>% 
+  ggplot(aes(TEAM_PITCHING_BB)) + 
+  geom_histogram(bins = 50) +
+  geom_vline(aes(xintercept = mean(TEAM_PITCHING_BB, na.rm = T)), col = "red", lty = 2) +
+  geom_vline(aes(xintercept = median(TEAM_PITCHING_BB, na.rm = T)), col = "green", lty = 2) +
+  labs(x = element_blank(),
+       y = "Count",
+       title = "Distribution PITCHING_BB",
+       caption = "* Red line is the mean value and green is the median")
+
+```
+
+
+## Data Preparation{.tabset}  
+
+Describe how you have transformed the data by changing the original variables or creating new variables. If you 
+did transform the data or create new variables, discuss why you did this. Here are some possible transformations.\
+a. Fix missing values (maybe with a Mean or Median value)\
+b. Create flags to suggest if a variable was missing\
+c. Transform data by putting it into buckets\
+d. Mathematical transforms such as log or square root (or use Box-Cox)\
+e. Combine variables (such as ratios or adding or multiplying) to create new variables)\
+
+
+### Method1: Impute missing values by using the most correlated values
+
+The approach here is impute missing values in a specific column using the most correlated variables. Additionally we can view boxplots of the data after imputation.\ 
+
+(1) Find the most correlated columns with the target column in the pre-computed correlation matrix\
+(2) Select top correlated columns that have no missing values\
+(3) Use top n correlated predictors\
+(4) Build regression model\
+(5) Predict and impute missing values on the training dataset\
+(6) We compare summary statistics to view imputed data and then check if any records have NA's and confirm there are no NA's present.\
+
+```{r}
+impute_missing_values <- function(df, corr_matrix, top_n = 2) {
+  #Identify columns with missing values
+  missing_columns <- names(df)[colSums(is.na(df)) > 0]
+  #Iterate over each column with missing values
+  for (column_name in missing_columns) {
+    missing_count <- sum(is.na(df[[column_name]]))
+    cat(paste("Column name: ", column_name, ", missing values:", missing_count, "\n"))
+    
+    #Check for missing
+    if (missing_count > 0) {
+      cat(paste("Working On Column:", column_name, "\n"))
+      
+      #Get corr columns
+      correlations <- sort(corr_matrix[, column_name], decreasing = TRUE)
+      
+      #Remove column from predictors
+      predictor_columns <- names(correlations)[names(correlations) != column_name]
+      
+      #Exclude predictors that have missing values
+      predictor_columns <- predictor_columns[!predictor_columns %in% missing_columns]
+      
+      #Use top n predictors
+      predictor_columns <- predictor_columns[1:min(top_n, length(predictor_columns))]
+      
+      #Print predictors
+      cat(paste("Predictors for column", column_name, ":", predictor_columns, "\n"))
+      
+      if (length(predictor_columns) > 0) {
+        #Impute missing values in predictors with their mean
+        for (pred_col in predictor_columns) {
+          if (any(is.na(df[[pred_col]]))) {
+            df[[pred_col]][is.na(df[[pred_col]])] <- mean(df[[pred_col]], na.rm = TRUE)
+          }
+        }
+        
+        #Build model
+        formula <- as.formula(paste(column_name, "~", paste(predictor_columns, collapse = "+")))
+        
+        #Fit Model
+        fit <- lm(formula, data = df, na.action = na.exclude)
+        
+        #Predict
+        na_indices <- is.na(df[[column_name]])
+        predicted_values <- predict(fit, newdata = df[na_indices, predictor_columns, drop = FALSE])
+        df[[column_name]][na_indices] <- predicted_values
+        
+        cat(paste("Imputed", sum(na_indices), "missing values in column:", column_name, "\n"))
+      } else {
+        #Fallback: Mean imputation for the column
+        df[[column_name]][is.na(df[[column_name]])] <- mean(df[[column_name]], na.rm = TRUE)
+        cat(paste("No valid predictors found. Fallback to mean imputation for column:", column_name, "\n"))
+      }
+    } else {
+      cat(paste("Skipped:", column_name, "\n"))
+    }
+  }
+  return(df)
+}
+
+```
+
+
+```{r Method 1 missing values}
+
+df_imputed <- impute_missing_values(df, correlation_matrix)
+summary(df_imputed)
+
+summary(df)
+
+```
+```{r Method1 Analyze box plots, echo=TRUE}
+#Create Boxplot function
+create_grouped_boxplot_with_stats <- function(df) {
+  
+  #Define groupings (I know could be made more modular)
+  team_batting <- colnames(df)[grep("^TEAM_BATTING_", colnames(df))]
+  team_pitching <- c("TEAM_PITCHING_H", "TEAM_PITCHING_HR", "TEAM_PITCHING_BB", "TEAM_PITCHING_SO")
+  everything_else <- setdiff(names(df), c(team_batting, team_pitching, "INDEX", "TARGET_WINS"))  # Exclude index and target
+  
+  #Helper function to plot multiple variables
+  generate_combined_boxplot <- function(df, columns, group_name) {
+    #Subset the data
+    df_subset <- df[, columns]
+    
+    #Melt the data 
+    df_melted <- melt(df_subset, variable.name = "Variable", value.name = "Value")
+    
+    #Create boxplot
+    p <- ggplot(df_melted, aes(x = Variable, y = Value)) +
+            geom_boxplot(fill = "skyblue", color = "black", outlier.colour = "red") +
+            labs(title = paste("Boxplot for", group_name), x = "Variables", y = "Value") +
+            theme_minimal() +
+            theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels
+    
+    print(p)
+    
+    #Print stats for each column
+    for (column in columns) {
+      stats <- summary(df[[column]])
+      cat(paste("Summary statistics for", column, ":\n"))
+      print(stats)
+    }
+  }
+  
+  #Generate boxplots for each group
+  cat("Team Batting Group:\n")
+  generate_combined_boxplot(df, team_batting, "TEAM_BATTING")
+  
+  cat("\nTEAM_PITCHING Group:\n")
+  generate_combined_boxplot(df, team_pitching, "TEAM_PITCHING")
+  
+  cat("\nEverything Else Group:\n")
+  generate_combined_boxplot(df, everything_else, "Everything Else")
+}
+
+create_grouped_boxplot_with_stats(df_imputed)
+```
+```{r Method1 compare summary statistics,echo=TRUE}
+compare_summary_stats <- function(df, df_imputed) {
+  
+  numeric_columns <- df %>% select_if(is.numeric) %>% names()
+  
+  #Extract summary statistics
+  extract_summary_stats <- function(df, columns) {
+    stats <- data.frame(Variable = character(),
+                        Min = numeric(), Q1 = numeric(), Median = numeric(),
+                        Mean = numeric(), Q3 = numeric(), Max = numeric(),
+                        stringsAsFactors = FALSE)
+    
+    for (column in columns) {
+      summary_vals <- as.numeric(summary(df[[column]]))
+      if (length(summary_vals) == 6) {  #Only keep good data
+        stats <- rbind(stats, data.frame(
+          Variable = column,
+          Min = summary_vals[1], Q1 = summary_vals[2], Median = summary_vals[3],
+          Mean = summary_vals[4], Q3 = summary_vals[5], Max = summary_vals[6]
+        ))
+      }
+    }
+    
+    return(stats)
+  }
+  
+  #Extract summary statistics
+  df_stats <- extract_summary_stats(df, numeric_columns)
+  df_imputed_stats <- extract_summary_stats(df_imputed, numeric_columns)
+  
+  #Calculate delta
+  stats_comparison <- df_stats %>%
+    left_join(df_imputed_stats, by = "Variable", suffix = c("_original", "_imputed")) %>%
+    mutate(
+      Min_diff = Min_imputed - Min_original,
+      Q1_diff = Q1_imputed - Q1_original,
+      Median_diff = Median_imputed - Median_original,
+      Mean_diff = Mean_imputed - Mean_original,
+      Q3_diff = Q3_imputed - Q3_original,
+      Max_diff = Max_imputed - Max_original
+    )
+  return(stats_comparison)
+}
+
+stats_comparison <- compare_summary_stats(df, df_imputed)
+
+#Display table
+print(stats_comparison)
+```
+
+
+### Method 2: Imputation using Mice
+
+MICE Imputation, short for 'Multiple Imputation by Chained Equation' is an advanced missing data imputation technique that uses plausible data points based on distributions. We use this imputation method below on both train data set and test dataset (Evaluation for use later on during prediction). Once we impute HBP column for instance, we look at the change in the histogram. For HBP, the curve has moved away from normal curve to something different with 2 different peaks which is not what we prefer, however, we will proceed keeping this imputation for this variable. For BASERUN_CS seems to have become more normal after imputation with mice.\
+
+After imputation of the dataset, we can see positive and negative correlations below with Target Wins. BASERUN_CS have mild positive correlation and Target wins and HBP have a slight negative correlation.\ 
+
+
+```{r Data PREPARATION }
+
+#Reviewing HBP that has 90% of the data missing to review the spread of the data
+
+df %>% 
+  ggplot(aes(TEAM_BATTING_HBP)) + 
+  geom_histogram(bins = 50) +
+  geom_vline(aes(xintercept = mean(TEAM_BATTING_HBP, na.rm = T)), col = "blue", lty = 2) +
+  geom_vline(aes(xintercept = median(TEAM_BATTING_HBP, na.rm = T)), col = "green", lty = 2) +
+  labs(x = element_blank(),
+       y = "Count",
+       title = "Hit By a Pitch",
+       caption = "* Blue line is the mean value and green is the median")
+
+# Set the seed for reproducibility
+set.seed(12345)
+
+# Perform Multiple Imputation
+imputed_data_df <- mice(df, m=5, method='pmm', print=FALSE)
+completedData <- complete(imputed_data_df,1)
+summary(completedData) %>%
+    kable() %>%
+    kable_styling()
+
+# Density plots 
+ggplot(df, aes(x=TEAM_BATTING_HBP, fill="Original")) +
+  geom_density(alpha=0.5) +
+  geom_density(data=completedData, aes(x=TEAM_BATTING_HBP, fill="imputed"), alpha=0.5) +
+  labs(title="Density Plot of Ozone: Original vs. Imputed")
+
+#check 0's again
+completedData %>% 
+  gather(variable, value) %>%
+  filter(value == 0) %>%
+  group_by(variable) %>%
+  tally() %>%
+  mutate(percent = n / nrow(completedData) * 100) %>%
+  mutate(percent = paste0(round(percent, ifelse(percent < 10, 1, 0)), "%")) %>%
+  arrange(desc(n)) %>%
+  rename(`Variable With Zeros` = variable,
+         `Number of Records` = n,
+         `Share of Total` = percent) %>%
+  kable() %>%
+  kable_styling()
+
+# #
+# hist(completedData$TEAM_BATTING_SO)
+# completedData$log_BATTING_SO <- (completedData$TEAM_BATTING_SO)^(1/3)
+# hist(completedData$log_BATTING_SO)
+
+#Analysis of Missing values on the imputed dataset
+missing1 <- colSums(completedData %>% sapply(is.na))
+missing_pct1 <- round(missing1 / nrow(df) * 100, 2)
+stack(sort(missing_pct1, decreasing = TRUE))
+
+mt1 <- completedData  %>% 
+  gather(key = 'variable', value = 'value')
+  
+  mt1 %>% ggplot(., aes(value)) + 
+  geom_density(fill = "green", color="green") + 
+  facet_wrap(.~variable, scales='free',ncol=4,labeller=variable_labeller)
+  
+completedData %>% 
+  ggplot(aes(TEAM_BATTING_HBP)) + 
+  geom_histogram(bins = 50) +
+  geom_vline(aes(xintercept = mean(TEAM_BATTING_HBP, na.rm = T)), col = "blue", lty = 2) +
+  geom_vline(aes(xintercept = median(TEAM_BATTING_HBP, na.rm = T)), col = "green", lty = 2) +
+  labs(x = element_blank(),
+       y = "Count",
+       title = "Hit By a Pitch with mice imputation",
+       caption = "* Blue line is the mean value and green is the median")
+
+completedData %>% 
+  ggplot(aes(TEAM_BASERUN_CS)) + 
+  geom_histogram(bins = 50) +
+  geom_vline(aes(xintercept = mean(TEAM_BASERUN_CS, na.rm = T)), col = "blue", lty = 2) +
+  geom_vline(aes(xintercept = median(TEAM_BASERUN_CS, na.rm = T)), col = "green", lty = 2) +
+  labs(x = element_blank(),
+       y = "Count",
+       title = "BASERUN_CS with mice imputation",
+       caption = "* Blue line is the mean value and green is the median")
+
+#Analyze Correlations
+M<- completedData %>%
+ cor(., use = "complete.obs")
+print(M)
+
+# corrplot(M, type = 'lower', order = 'hclust', tl.col = 'black',
+#          cl.ratio = 0.2, tl.srt = 45, col = COL2('PuOr', 10))
+# 
+# testRes = cor.mtest(M, conf.level = 0.95)
+
+#correlations including TARGET WINS and multi-collinearity
+
+ggcorrplot(M, type = "upper", outline.color = "white",
+           ggtheme = theme_classic,
+           #colors = c("#6D9EC1", "white", "#E46726"),
+           lab = TRUE, show.legend = FALSE, tl.cex = 8, lab_size = 3)
+
+
+#IMPUTE TEST DATASET FOR CONSISTENCY
+
+
+# moneyball_testdta %>% 
+#   ggplot(aes(TEAM_BATTING_HBP)) + 
+#   geom_histogram(bins = 50) +
+#   geom_vline(aes(xintercept = mean(TEAM_BATTING_HBP, na.rm = T)), col = "blue", lty = 2) +
+#   geom_vline(aes(xintercept = median(TEAM_BATTING_HBP, na.rm = T)), col = "green", lty = 2) +
+#   labs(x = element_blank(),
+#        y = "Count",
+#        title = "Hit By a Pitch TEST EVALUATION DATASET - REVIEW TO IMPUTE",
+#        caption = "* Blue line is the mean value and green is the median")
+
+# Set the seed for reproducibility
+set.seed(12345)
+
+# Perform Multiple Imputation
+imputed_TEST_df <- mice(moneyball_testdta, m=5, method='pmm', print=FALSE)
+completedData1 <- complete(imputed_TEST_df,1)
+summary(completedData1) %>%
+    kable() %>%
+    kable_styling()
+
+# # Density plots 
+# ggplot(moneyball_testdta , aes(x=TEAM_BATTING_HBP, fill="Original")) +
+#   geom_density(alpha=0.5) +
+#   geom_density(data=completedData1, aes(x=TEAM_BATTING_HBP, fill="Imputed"), alpha=0.5) +
+#   labs(title="Density Plot of TEAM_BATTING_HBP: Original vs. Imputed")
+
+# #check 0's again
+# completedData1 %>% 
+#   gather(variable, value) %>%
+#   filter(value == 0) %>%
+#   group_by(variable) %>%
+#   tally() %>%
+#   mutate(percent = n / nrow(completedData1) * 100) %>%
+#   mutate(percent = paste0(round(percent, ifelse(percent < 10, 1, 0)), "%")) %>%
+#   arrange(desc(n)) %>%
+#   rename(`Variable With Zeros IMPUTED TEST EVAL DATASET` = variable,
+#          `Number of Records` = n,
+#          `Share of Total` = percent) %>%
+#   kable() %>%
+#   kable_styling()
+
+
+#Analysis of Missing values on the imputed dataset
+missing2 <- colSums(completedData1 %>% sapply(is.na))
+missing_pct2 <- round(missing2 / nrow(df) * 100, 2)
+stack(sort(missing_pct2, decreasing = TRUE))
+
+```
+
+### Method 3: Data Transformation (Log and BoxCox)
+
+As seen on the histogram distributions, the spread of the data shows right and left skew and we can perform some math transformations (might help in normalizing the variability of the data).\ 
+
+Log and Box Cox transformations are used here for that purpose as seen on the comparative histograms below. Logarithm scale, allows small values that are close together are spread further out. Larger values that are spread out are brought closer together.\
+
+We can create a new variable such as TEAM_BATTING_1B to see if it has any influence over the target wins through our model build process.\
+
+We have imputed the HBP and the CS variables with the medians in this method. After imputing with medians we have applied log transformation.The HBP variable was missing a large number cases. From the qqplot on the original HBP and then the log transformed HBP_T show that the new variable is not normal on the qqplot. There is a large deviation on left and the right tails. Hence we will consider dropping this transformed variable from the model later on and utilize the other variables to see if the fit of the data to the model is applicable.\
+
+3B_t and E_T both on earlier qqplot showed some non-linear on the tails and these seemed have smoothed over better with the log and boxcox transformation so we can keep these in use for the model fit.\ 
+
+
+
+
+```{r Data PREPARATION Log and BoxCox}
+
+
+# New variable: TEAM_BATTING_1B
+tdata <- read.csv("https://raw.githubusercontent.com/BanuB/CUNY-DATA-621/refs/heads/main/moneyball-training-data.csv", header = TRUE) %>% dplyr::select(-INDEX)
+baseline <- tdata
+updbase <- baseline %>% mutate(TEAM_BATTING_1B = baseline$TEAM_BATTING_H - dplyr::select(., TEAM_BATTING_2B:TEAM_BATTING_HR) %>% rowSums(na.rm = FALSE))
+head(updbase)
+
+#Check new variable distribution
+updbase %>% 
+  ggplot(aes(TEAM_BATTING_1B)) + 
+  geom_histogram(bins = 50) +
+  geom_vline(aes(xintercept = mean(TEAM_BATTING_1B, na.rm = T)), col = "blue", lty = 2) +
+  geom_vline(aes(xintercept = median(TEAM_BATTING_1B, na.rm = T)), col = "green", lty = 2) +
+  labs(x = element_blank(),
+       y = "Count",
+       title = "New variable: TEAM_BATTING_1B",
+       caption = "* Blue line is the mean value and green is the median")
+
+#TRANSFORM ALL OTHER VARIABLES
+transformDS <- updbase
+
+#keep HBP and let's not drop it.
+med_TF <- round(median(transformDS$TEAM_BATTING_HBP, na.rm = TRUE),0)
+transformDS[is.na(transformDS[,"TEAM_BATTING_HBP"]), "TEAM_BATTING_HBP"] <- med_TF
+
+#keep CS and let's not drop it.
+med_CS <- round(median(transformDS$TEAM_BASERUN_CS, na.rm = TRUE),0)
+transformDS[is.na(transformDS[,"TEAM_BASERUN_CS"]), "TEAM_BASERUN_CS"] <- med_CS
+
+#Analysis of Missing values on the imputed dataset
+missing6 <- colSums(transformDS %>% sapply(is.na))
+missing_pct6 <- round(missing6 / nrow(df) * 100, 2)
+stack(sort(missing_pct6, decreasing = TRUE))
+
+
+#Log transform TEAM_BASERUN_CS
+transformDS$TEAM_BASERUN_CS_t <-log(transformDS$TEAM_BASERUN_CS)
+baserun_cs <- ggplot(transformDS, aes(x=TEAM_BASERUN_CS)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "TEAM_BASERUN_CS")
+baserun_cs_tf <- ggplot(transformDS, aes(x=TEAM_BASERUN_CS_t)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "Log Transformed")
+
+#Log transform TEAM_BATTING_HBP
+transformDS$TEAM_BATTING_HBP_t <-log(transformDS$TEAM_BATTING_HBP)
+baserun_HBP <- ggplot(transformDS, aes(x=TEAM_BASERUN_HBP)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "TEAM_BATTING_HBP")
+baserun_HBP_tf <- ggplot(transformDS, aes(x=TEAM_BATTING_HBP_t)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "Log Transformed")
+
+#Log transform TEAM_BASERUN_SB
+transformDS$TEAM_BASERUN_SB_t <-log(transformDS$TEAM_BASERUN_SB)
+baserun_sb <- ggplot(transformDS, aes(x=TEAM_BASERUN_SB)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "TEAM_BASERUN_SB")
+baserun_sb_tf <- ggplot(transformDS, aes(x=TEAM_BASERUN_SB_t)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "Log Transformed")
+
+#Log transform TEAM_BATTING_2B
+transformDS$TEAM_BATTING_2B_t <-log(transformDS$TEAM_BATTING_2B)
+batting_2b <- ggplot(transformDS, aes(x=TEAM_BATTING_2B)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "TEAM_BATTING_2B")
+batting_2b_tf <- ggplot(transformDS, aes(x=TEAM_BATTING_2B_t)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "Log Transformed")
+
+
+#Log transform TEAM_BATTING_3B
+transformDS$TEAM_BATTING_3B_t <-log(transformDS$TEAM_BATTING_3B)
+batting_3b <- ggplot(transformDS, aes(x=TEAM_BATTING_3B)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "TEAM_BATTING_3B")
+batting_3b_tf <- ggplot(transformDS, aes(x=TEAM_BATTING_3B_t)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "Log Transformed")
+
+#BoxCoxtransform TEAM_BATTING_BB
+transformDS$TEAM_BATTING_BB_t <- BoxCox(transformDS$TEAM_BATTING_BB, BoxCox.lambda(transformDS$TEAM_BATTING_BB))
+batting_bb <- ggplot(transformDS, aes(x=TEAM_BATTING_BB)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "TEAM_BATTING_BB")
+batting_bb_tf <- ggplot(transformDS, aes(x=TEAM_BATTING_BB_t)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "BoxCox Transformed")
+
+#BoxCoxtransform TEAM_BATTING_H
+transformDS$TEAM_BATTING_H_t <- BoxCox(transformDS$TEAM_BATTING_H, BoxCox.lambda(transformDS$TEAM_BATTING_H))
+batting_h <- ggplot(transformDS, aes(x=TEAM_BATTING_H)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "TEAM_BATTING_H")
+batting_h_tf <- ggplot(transformDS, aes(x=TEAM_BATTING_H_t)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "BoxCox Transformed")
+
+#BoxCoxtransform TEAM_BATTING_1B
+transformDS$TEAM_BATTING_1B_t <- BoxCox(transformDS$TEAM_BATTING_1B, BoxCox.lambda(transformDS$TEAM_BATTING_1B))
+batting_1b <- ggplot(transformDS, aes(x=TEAM_BATTING_1B)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "TEAM_BATTING_1B")
+batting_1b_tf <- ggplot(transformDS, aes(x=TEAM_BATTING_1B_t)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "BoxCox Transformed")
+
+#BoxCoxtransform TEAM_FIELDING_E
+transformDS$TEAM_FIELDING_E_t <- BoxCox(transformDS$TEAM_FIELDING_E, BoxCox.lambda(transformDS$TEAM_FIELDING_E))
+fielding_e <- ggplot(transformDS, aes(x=TEAM_FIELDING_E)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "TEAM_FIELDING_E")
+fielding_e_tf <- ggplot(transformDS, aes(x=TEAM_FIELDING_E_t)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "BoxCox Transformed")
+
+#Log transform TEAM_PITCHING_BB
+transformDS$TEAM_PITCHING_BB_t <-log(transformDS$TEAM_PITCHING_BB)
+pitching_bb <- ggplot(transformDS, aes(x=TEAM_PITCHING_BB)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "TEAM_PITCHING_BB")
+pitching_bb_tf <- ggplot(transformDS, aes(x=TEAM_PITCHING_BB_t)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "Log Transformed")
+
+#BoxCoxtransform TEAM_PITCHING_H
+transformDS$TEAM_PITCHING_H_t <- BoxCox(transformDS$TEAM_PITCHING_H, BoxCox.lambda(transformDS$TEAM_PITCHING_H))
+pitching_h <- ggplot(transformDS, aes(x=TEAM_PITCHING_H)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "TEAM_PITCHING_H")
+pitching_h_tf <- ggplot(transformDS, aes(x=TEAM_PITCHING_H_t)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "BoxCox Transformed")
+
+#Log transform TEAM_PITCHING_SO
+transformDS$TEAM_PITCHING_SO_t <-log(transformDS$TEAM_PITCHING_SO)
+pitching_so <- ggplot(transformDS, aes(x=TEAM_PITCHING_SO)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "TEAM_PITCHING_SO")
+pitching_so_tf <- ggplot(transformDS, aes(x=TEAM_PITCHING_SO_t)) + 
+    geom_histogram(aes(y=..density..), colour="black", fill="red") +
+    geom_density(alpha=.8, fill="lightblue") + 
+  theme_classic() + labs(title = "Log Transformed")
+
+p1<- plot_grid(baserun_cs, baserun_cs_tf, baserun_sb, baserun_sb_tf,batting_3b, batting_3b_tf, batting_bb, batting_bb_tf,
+         batting_h, batting_h_tf, ncol=2)
+
+p2<- plot_grid(batting_1b, batting_1b_tf, fielding_e, fielding_e_tf, pitching_bb, pitching_bb_tf, 
+pitching_h, pitching_h_tf, pitching_so, pitching_so_tf,ncol=2)
+
+p1
+
+p2
+
+#For Bimodal we want to understand qqplot.
+qqplot_BATTING_HBP_t  <- ggplot(transformDS, aes(sample = TEAM_BATTING_HBP_t)) +
+    stat_qq() + 
+    stat_qq_line() +
+    labs(title="TEAM_BATTING_HBP_t")
+
+qqplot_BATTING_HBP_t
+
+#For Bimodal we want to understand qqplot.
+qqplot_BATTING_3B_t  <- ggplot(transformDS, aes(sample = TEAM_BATTING_3B_t)) +
+    stat_qq() + 
+    stat_qq_line() +
+    labs(title="BATTING_3B_t")
+qqplot_BATTING_3B_t 
+
+#for this variable had several outliers and higly skewed distribution
+qqplot_TEAM_FIELDING_E_t  <- ggplot(transformDS, aes(sample = TEAM_FIELDING_E_t)) +
+    stat_qq() + 
+    stat_qq_line() +
+    labs(title="TEAM_FIELDING_E_t")
+
+qqplot_TEAM_FIELDING_E_t
+
+#Test data transformations to be consistent
+ttest <- read.csv("https://raw.githubusercontent.com/BanuB/CUNY-DATA-621/refs/heads/main/moneyball-evaluation-data.csv", header = TRUE)%>%dplyr::select(-INDEX)  
+
+basetest <- ttest %>% mutate(TEAM_BATTING_1B = TEAM_BATTING_H - dplyr::select(., TEAM_BATTING_2B:TEAM_BATTING_HR) %>% rowSums(na.rm = FALSE))
+
+test_tf <- basetest
+
+#keep HBP and let's not drop it.
+med_TF1 <- round(median(basetest$TEAM_BATTING_HBP, na.rm = TRUE),0)
+basetest[is.na(basetest[,"TEAM_BATTING_HBP"]), "TEAM_BATTING_HBP"] <- med_TF1
+
+#keep CS and let's not drop it.
+med_CS1 <- round(median(basetest$TEAM_BASERUN_CS, na.rm = TRUE),0)
+basetest[is.na(basetest[,"TEAM_BASERUN_CS"]), "TEAM_BASERUN_CS"] <- med_CS1
+
+#Analysis of Missing values on the imputed dataset
+missing7 <- colSums(basetest %>% sapply(is.na))
+missing_pct7 <- round(missing7 / nrow(df) * 100, 2)
+stack(sort(missing_pct7, decreasing = TRUE))
+
+
+#Log transform TEAM_BASERUN_CS
+test_tf$TEAM_BASERUN_CS_t <-log(test_tf$TEAM_BASERUN_CS)
+
+#Log transform TEAM_BASERUN_SB
+test_tf$TEAM_BASERUN_SB_t <-log(test_tf$TEAM_BASERUN_SB)
+
+#Log transform TEAM_BATTING_3B
+test_tf$TEAM_BATTING_3B_t <-log(test_tf$TEAM_BATTING_3B)
+
+#BoxCoxtransform TEAM_BATTING_BB
+test_tf$TEAM_BATTING_BB_t <- BoxCox(test_tf$TEAM_BATTING_BB, BoxCox.lambda(test_tf$TEAM_BATTING_BB))
+
+#BoxCoxtransform TEAM_BATTING_H
+test_tf$TEAM_BATTING_H_t <- BoxCox(test_tf$TEAM_BATTING_H, BoxCox.lambda(test_tf$TEAM_BATTING_H))
+
+#BoxCoxtransform TEAM_BATTING_1B
+test_tf$TEAM_BATTING_1B_t <- BoxCox(test_tf$TEAM_BATTING_1B, BoxCox.lambda(test_tf$TEAM_BATTING_1B))
+
+#BoxCoxtransform TEAM_FIELDING_E
+test_tf$TEAM_FIELDING_E_t <- BoxCox(test_tf$TEAM_FIELDING_E, BoxCox.lambda(test_tf$TEAM_FIELDING_E))
+
+#Log transform TEAM_PITCHING_BB
+test_tf$TEAM_PITCHING_BB_t <-log(test_tf$TEAM_PITCHING_BB)
+
+#BoxCoxtransform TEAM_PITCHING_H
+test_tf$TEAM_PITCHING_H_t <- BoxCox(test_tf$TEAM_PITCHING_H, BoxCox.lambda(test_tf$TEAM_PITCHING_H))
+
+#Log transform TEAM_PITCHING_SO
+test_tf$TEAM_PITCHING_SO_t <-log(test_tf$TEAM_PITCHING_SO)
+
+```
+
+### Method 4: Data Transformation (Create new statistic variable similar to MLB site)
+
+Some common statistics variables used in baseball can be derived from existing variables in our dataset.
+
+We have created few variables below to see how we can fit a model to explore these variables and their influence on predicting Target Wins.
+AVG (Batting Average) - Rate of hits per at bat. Formula - H/AB\
+OBP (On-Base Percentage) - The rate at which a batter reached base in his plate appearances. Formula -H+BB+HBP/AB+BB+HBP+SF. 
+We don't have a column for SF(sacrifice flies) so we will calculate without it.\
+Slugging Percentage (SLG) - Slugging percentage represents the total number of bases a player records per at-bat. Unlike on-base percentage, slugging percentage deals only with hits and does not include walks and hit-by-pitches in its equation.Formula - (1B + 2Bx2 + 3Bx3 + HRx4)/AB\
+
+After imputing HBP and CS with the median values, we have then proceeded to calculate the other new variables. 
+We do this for the test evaluation dataset to remain consistent.\
+
+
+
+
+```{r Data CREATE NEW variables }
+
+
+# New variable
+NEW_features <- function(df1) {
+  df1 %>%
+    mutate(TEAM_BATTING_1B = TEAM_BATTING_H - TEAM_BATTING_2B - TEAM_BATTING_3B - TEAM_BATTING_HR) %>% 
+    mutate(TEAM_BATTING_AB = TEAM_BATTING_H + TEAM_BATTING_BB + TEAM_BATTING_HBP + TEAM_BATTING_SO) %>%
+    mutate(TEAM_BATTING_AVG = TEAM_BATTING_H/TEAM_BATTING_AB) %>%
+    mutate(TEAM_BATTING_OBP = (TEAM_BATTING_H + TEAM_BATTING_BB + TEAM_BATTING_HBP)/(TEAM_BATTING_AB + TEAM_BATTING_BB + TEAM_BATTING_HBP)) %>%
+    mutate(TEAM_BATTING_SLG = (TEAM_BATTING_1B + 2*TEAM_BATTING_2B + 3*TEAM_BATTING_3B + 4*TEAM_BATTING_HR)/TEAM_BATTING_AB)
+}
+
+#Impute with median value
+NEW_tdata <- read.csv("https://raw.githubusercontent.com/BanuB/CUNY-DATA-621/refs/heads/main/moneyball-training-data.csv", header = TRUE) %>% dplyr::select(-INDEX)
+train_impHBP <- NEW_tdata
+med_hbp <- round(median(train_impHBP$TEAM_BATTING_HBP, na.rm = TRUE),0)
+train_impHBP[is.na(train_impHBP[,"TEAM_BATTING_HBP"]), "TEAM_BATTING_HBP"] <- med_hbp
+
+#keep CS and let's not drop it.
+med_CS1 <- round(median(train_impHBP$TEAM_BASERUN_CS, na.rm = TRUE),0)
+train_impHBP[is.na(train_impHBP[,"TEAM_BASERUN_CS"]), "TEAM_BASERUN_CS"] <- med_CS1
+
+#keep CS and let's not drop it.
+med_SO <- round(median(train_impHBP$TEAM_BATTING_SO, na.rm = TRUE),0)
+train_impHBP[is.na(train_impHBP[,"TEAM_BATTING_SO"]), "TEAM_BATTING_SO"] <- med_SO
+
+dtrain_ALLNEWfeat <- NEW_features(train_impHBP)
+
+dtrain_ALLNEWfeat
+
+#Analysis of Missing values on the imputed dataset
+missing5 <- colSums(dtrain_ALLNEWfeat %>% sapply(is.na))
+missing_pct5 <- round(missing5 / nrow(df) * 100, 2)
+stack(sort(missing_pct5, decreasing = TRUE))
+
+dtrain_ALLNEWfeat %>%
+  gather(variable, value, -c(TARGET_WINS:TEAM_BATTING_1B)) %>%
+  ggplot(., aes(value, TARGET_WINS)) + 
+  geom_point(fill = "lightblue", color="lightblue") + 
+  geom_smooth(method = "lm", se = FALSE, color = "red") + 
+  facet_wrap(~variable, scales ="free", nrow = 4) +
+  labs(x = element_blank(), y = "Wins")
+
+dtrain_ALLNEWfeat %>% 
+  ggplot(aes(TEAM_BATTING_AB)) + 
+  geom_histogram(bins = 50) +
+  geom_vline(aes(xintercept = mean(TEAM_BATTING_AB, na.rm = T)), col = "blue", lty = 2) +
+  geom_vline(aes(xintercept = median(TEAM_BATTING_AB, na.rm = T)), col = "green", lty = 2) +
+  labs(x = element_blank(),
+       y = "Count",
+       title = "TEAM_BATTING_AB TEST EVALUATION DATASET - REVIEW TO IMPUTE",
+       caption = "* Blue line is the mean value and green is the median")
+
+
+```
+
+
+
+
+## BUILD MODEL{.tabset}
+
+
+Using the training data set, build at least three different multiple linear regression models, using different variables 
+(or the same variables with different transformations). Since we have not yet covered automated variable 
+selection methods, you should select the variables manually (unless you previously learned Forward or Stepwise
+selection, etc.). Since you manually selected a variable for inclusion into the model or exclusion into the model, 
+indicate why this was done.\
+
+Discuss the coefficients in the models, do they make sense? For example, if a team hits a lot of Home Runs, it 
+would be reasonably expected that such a team would win more games. However, if the coefficient is negative 
+(suggesting that the team would lose more games), then that needs to be discussed. Are you keeping the model 
+even though it is counter intuitive? Why? The boss needs to know.\
+
+
+
+### APPROACH 1: Full Model
+
+The approach 1 is to construct a full model. Here, we have used the mice imputed dataset and did not drop the HBP and CS variables.A few records that had 0 values , we let them remain as is.\
+
+In the Coefficients section, TEAM_BATTING_H, TEAM_BATTING_SO,TEAM_BASERUN_SB  are considered significant by the model because their p-value is lower than 0.05 , however, TEAM_BASERUN_CS  is not considered significant.\ 
+
+As seem above, SB — The total number of bases stolen by a team’s hitters. Stolen bases give runners opportunities to get in better scoring positions, therefore it has a positive significance here. \
+
+```{r BUILD MODEL 1}
+# full model using mice imputed data
+mfull <- lm(TARGET_WINS ~., data = completedData, na.action = na.omit)
+
+summary(mfull)
+
+plot(mfull)
+
+# Get the model residuals
+model_residuals = mfull$residuals
+
+# Plot the result
+hist(model_residuals)
+
+# Plot the residuals
+qqnorm(model_residuals)
+# Plot the Q-Q line
+qqline(model_residuals)
+
+
+```
+
+
+###  APPROACH 1A: Model with retaining only highly significant features from the full model
+
+WE have manually used only significant features of the first model, and here we see that the R-squared has slightly decreased to 0.3357 from 0.3709
+which implies that the full model is better performing.\
+
+From the ANOVA result, we observe that the p-value (2.2e-16 ) is very small (less than 0.05), so we reject the null hypothesis, meaning that the second model is not an improvement of the first one.\ 
+
+```{r BUILD MODEL 1A}
+#full model using mice imputed data
+mfull2 <- lm(TARGET_WINS ~TEAM_BATTING_H + TEAM_BATTING_SO +TEAM_BASERUN_SB +TEAM_PITCHING_H+TEAM_FIELDING_E+ TEAM_FIELDING_DP, data = completedData, na.action = na.omit)
+
+summary(mfull2)
+
+plot(mfull2)
+
+anova(mfull, mfull2)
+
+
+
+```
+
+
+
+### APPROACH 2: Model with automated variable selection process using STEPAIC 
+
+We have built 3 MODELS using automated variable selection process and StepAIC below. Additionally calculate the RMSE value and extract coefficients from the top 2 models to evaluate during model slection process.\
+
+
+```{r APPROACH 2}
+set.seed(1024)  #Set Seed
+split <- createDataPartition(df_imputed$TARGET_WINS, p = 0.8, list = FALSE)
+train_data <- df_imputed[split, ]
+test_data <- df_imputed[-split, ]
+
+#Build Model with all params
+full_model <- lm(TARGET_WINS ~ ., data = train_data)
+
+#Automatic Tuning
+
+#Tune Forward 
+forward_model <- stepAIC(lm(TARGET_WINS ~ 1, data = train_data), 
+                         direction = "forward", 
+                         scope = formula(full_model), 
+                         trace = FALSE)
+
+#Tune Backward
+backward_model <- stepAIC(full_model, direction = "backward", trace = FALSE)
+
+#Tune Stepwise
+stepwise_model <- stepAIC(full_model, direction = "both", trace = FALSE)
+
+#Calculate RMSE function
+evaluate_rmse <- function(model, test_data) {
+  predictions <- predict(model, newdata = test_data)
+  rmse <- sqrt(mean((test_data$TARGET_WINS - predictions)^2))
+  return(rmse)
+}
+
+#Calculate RMSE
+rmse_forward <- evaluate_rmse(forward_model, test_data)
+rmse_backward <- evaluate_rmse(backward_model, test_data)
+rmse_stepwise <- evaluate_rmse(stepwise_model, test_data)
+
+#Visualize RMSE for each model
+rmse_table <- data.frame(
+  Model = c("Forward Selection", "Backward Elimination", "Stepwise Selection"),
+  RMSE = c(rmse_forward, rmse_backward, rmse_stepwise)
+)
+
+#Select the top two Models
+top_two_models <- rmse_table %>% arrange(RMSE) %>% head(2)
+print("Top 2 models by RMSE:")
+print(top_two_models)
+
+#Extract coefficients for the top two models
+get_model_coefficients <- function(model) {
+  coef_df <- as.data.frame(coef(model))
+  coef_df$Variable <- rownames(coef_df)
+  colnames(coef_df) <- c("Coefficient", "Variable")
+  return(coef_df)
+}
+
+#Find the top two models by RMSE
+model_names <- top_two_models$Model
+if ("Forward Selection" %in% model_names) {
+  forward_coefficients <- get_model_coefficients(forward_model)
+  print("Forward Selection Coefficients:")
+  print(forward_coefficients)
+}
+
+if ("Backward Elimination" %in% model_names) {
+  backward_coefficients <- get_model_coefficients(backward_model)
+  print("Backward Elimination Coefficients:")
+  print(backward_coefficients)
+}
+
+if ("Stepwise Selection" %in% model_names) {
+  stepwise_coefficients <- get_model_coefficients(stepwise_model)
+  print("Stepwise Selection Coefficients:")
+  print(stepwise_coefficients)
+}
+```
+
+
+### APPROACH 3: Polynomial Regression
+
+Similar to linear regression, model evaluation metrics such as mean squared error (MSE), R-squared, or adjusted R-squared can be used to assess the performance of the polynomial regression model.The degree selection is important as it can lead to underfitting when it is smaller or overfitting if its higher. The ADJ R^2 of 0.0.4627 is the best fit so far based on our squares. Also the RMSE calculated is 30.20802.\
+
+```{r APPROACH 3}
+set.seed(1024)
+Equation <- "TARGET_WINS ~ TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_HR + TEAM_BATTING_BB + TEAM_BATTING_SO + TEAM_BASERUN_SB + TEAM_BASERUN_CS + TEAM_PITCHING_H + TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + TEAM_FIELDING_DP + I(TEAM_BATTING_2B^2) + I(TEAM_BATTING_3B^2) + I(TEAM_BATTING_HR^2) + I(TEAM_BATTING_BB^2) + I(TEAM_BATTING_SO^2) + I(TEAM_BASERUN_SB^2) + I(TEAM_BASERUN_CS^2) + I(TEAM_PITCHING_H^2) + I(TEAM_PITCHING_HR^2) + I(TEAM_PITCHING_BB^2) + I(TEAM_PITCHING_SO^2) + I(TEAM_FIELDING_E^2) + I(TEAM_FIELDING_DP^2)  + I(TEAM_BATTING_2B^3) + I(TEAM_BATTING_3B^3) + I(TEAM_BATTING_HR^3) + I(TEAM_BATTING_BB^3) + I(TEAM_BATTING_SO^3) + I(TEAM_BASERUN_SB^3) + I(TEAM_BASERUN_CS^3) + I(TEAM_PITCHING_H^3) + I(TEAM_PITCHING_HR^3) + I(TEAM_PITCHING_BB^3) + I(TEAM_PITCHING_SO^3) + I(TEAM_FIELDING_E^3) + I(TEAM_FIELDING_DP^3)  + I(TEAM_BATTING_2B^4) + I(TEAM_BATTING_3B^4) + I(TEAM_BATTING_HR^4) + I(TEAM_BATTING_BB^4) + I(TEAM_BATTING_SO^4) + I(TEAM_BASERUN_SB^4) + I(TEAM_BASERUN_CS^4) + I(TEAM_PITCHING_H^4) + I(TEAM_PITCHING_HR^4) + I(TEAM_PITCHING_BB^4) + I(TEAM_PITCHING_SO^4) + I(TEAM_FIELDING_E^4) + I(TEAM_FIELDING_DP^4) "
+
+mpoly <- lm(Equation, completedData)
+step_back <- MASS::stepAIC(mpoly, direction="backward", trace = F)
+poly_call <- summary(step_back)$call
+step_back <- lm(poly_call[2], completedData)
+summary(step_back)
+coef(step_back)
+
+summary(step_back)
+
+#calculate RMSE value for polynomial model
+rmse_Polymod3 <- evaluate_rmse(step_back, test_data)
+rmse_Polymod3
+
+
+```
+
+### APPROACH 4: Model with transformed data
+
+Here we have built a model manually by selecting most of the transformed variables using log and boxcox on the explanatory variables , and did not include the HBP_t values since the qqplot showed a large deviation from the left and right tails. The R^2 value is moderate in this case and not as great as the polynomial fit above.Polynomial degree of 3 can accomadate more curves to fit the data, therefore it is the best fit so far compared to the model with the transformed data.\
+
+```{r BUILD MODEL 4}
+#data with all transformed variables, we drop HBP_t since on the qqplot it had a significant deviation on the left and right tails.
+
+transformDS
+mT_data <- dplyr::select(transformDS, -TEAM_BASERUN_SB, -TEAM_BATTING_3B, -TEAM_BATTING_BB, -TEAM_BATTING_H, -TEAM_FIELDING_E, -TEAM_PITCHING_BB, -TEAM_PITCHING_H, -TEAM_PITCHING_SO, -TEAM_BATTING_1B,-TEAM_BATTING_HBP, -TEAM_BASERUN_CS,-TEAM_BATTING_HBP_t)
+
+mT4_data <- lm(TARGET_WINS ~., data = mT_data)
+summary(mT4_data)
+
+plot(mT4_data)
+
+```
+
+### APPROACH 4A: Model with transformed data and backwards elimination
+
+Here we have simply manually removed variables that are not as highly significant from the model with transformed variables above with  log and boxcox.\
+
+```{r BUILD MODEL 4A}
+#data with all transformed variables,KEEP HBP and CS of imputed variable
+
+# mT5_data <- lm(TARGET_WINS ~ TEAM_BATTING_SO + TEAM_BATTING_HR+TEAM_BATTING_1B_t+TEAM_BASERUN_CS_t+TEAM_PITCHING_HR +TEAM_PITCHING_H_t+TEAM_PITCHING_SO_t+ TEAM_BATTING_HBP_t+
+#      TEAM_FIELDING_DP + TEAM_BASERUN_SB_t + 
+#      TEAM_BATTING_3B_t + TEAM_BATTING_BB_t + TEAM_BATTING_2B_t+
+#     TEAM_FIELDING_E_t , data = transformDS)
+
+
+mT5_data <- lm(TARGET_WINS ~ TEAM_BATTING_SO +
+     TEAM_FIELDING_DP + TEAM_BASERUN_SB_t + 
+     TEAM_BATTING_3B_t+ TEAM_BATTING_BB_t +TEAM_FIELDING_E_t   , data = transformDS)
+
+summary(mT5_data)
+
+plot(mT5_data)
+```
+
+### APPROACH 5: Model with new variables & Cook's distance
+
+Our approach 5 is to build the model with standard baseball derived variables like AB, AVG, OBP and SLG. These all potentially should have a positive impact on Target Wins. We measured the cooks distance and influential points and then on the 2nd fit of the models removed those outliers and reran the model again to see if the fit , R-squared was higher. Indeed the original adj- R squared was 0.1922 and after removing about the outlier records, the adjusted R-square was 0.2422.\ 
+
+
+```{r BUILD MODEL 5}
+#data with all transformed variables,KEEP HBP and CS of imputed variable
+
+
+m7 <- lm(TARGET_WINS ~., data = dtrain_ALLNEWfeat, na.action = na.omit)
+summary(m7)
+
+m6 <- lm(TARGET_WINS ~ TEAM_BATTING_AB + TEAM_BATTING_AVG + TEAM_BATTING_OBP + TEAM_BATTING_SLG, data = dtrain_ALLNEWfeat )
+summary(m6)
+
+par(mfrow = c(2, 2))
+plot(m6)
+
+m6cd<- cooks.distance(m6)
+cooks.distance(m6)[which.max(cooks.distance(m6))]
+
+#plot cooks distance
+plot(m6,which=4)
+
+plot(cooks.distance(m6),type="b",pch=18,col="red")
+
+N = 2271
+k = 4
+cutoff = 4/ (N-k-1)
+abline(h=cutoff,lty=2)
+
+subsetds <- m6cd < 0.001765225
+
+#Find influential & outlier points
+sum(m6cd > 0.001765225)
+
+#removing the outliers about 131 influential points does seemed to have helped.
+m6upd <- lm(TARGET_WINS ~ TEAM_BATTING_AB + TEAM_BATTING_AVG + TEAM_BATTING_OBP + TEAM_BATTING_SLG, data = dtrain_ALLNEWfeat, subset = m6cd < 0.001765225)
+summary(m6upd)
+
+plot(cooks.distance(m6upd),type="b",pch=18,col="red")
+
+N = 2271
+k = 4
+cutoff = 4/ (N-k-1)
+abline(h=cutoff,lty=2)
+
+
+
+
+```
+
+
+## SELECT MODELS{.tabset}
+
+Decide on the criteria for selecting the best multiple linear regression model. Will you select a model with slightly 
+worse performance if it makes more sense or is more parsimonious? Discuss why you selected your model.\
+
+For the multiple linear regression model, will you use a metric such as Adjusted R2, RMSE, etc.? Be sure to 
+explain how you can make inferences from the model, discuss multi-collinearity issues (if any), and discuss other 
+relevant model output.\ 
+
+Using the training data set, evaluate the multiple linear regression model based on (a) 
+mean squared error, (b) R2, (c) F-statistic, and (d) residual plots. Make predictions using the evaluation data set\
+
+
+### BEST FIT: SUMMARY ANALYSIS: Model using APPROACH 1 (From BUILD MODELS section). Predictions for the TEST evaluation data set has been written out to Excel files for both BEST FIT models (We have selected 2 models as best fit)
+
+
+Delving into the coefficients provides insights into how different factors impact team success. Positive coefficients, such as those for TEAM_BATTING_H (0.0438), TEAM_BATTING_HR (0.0607), and TEAM_BATTING_3B (0.0596), indicate that increasing base hits, home runs, and triples, respectively, are associated with a boost in predicted wins. This suggests that improving a team's hitting performance, particularly with power and extra-base hits, strongly contributes to the overall success of the team. Additionally, TEAM_BASERUN_SB (0.0368) suggests that increasing stolen bases positively affects wins, further highlighting the offensive advantage of aggressive baserunning. On the other hand, the negative coefficients pinpoint areas that detract form team performance. A great example is TEAM_FIELDING_E (-0.0372) indicate that each additional fielding error decreases the predicted number of wins, underscoring the need to minimize defensive mistakes. Interestingly, TEAM_FIELDING_DP (-0.1213) is a strong negative coefficient, suggesting that while double plays are generally viewed positively in game, from a win perspective, it may indicate other weaknesses within the team.\ 
+
+
+```{r Coefficients Review}
+merge_coefficients_with_definitions <- function(coeff_table) {
+  var_definitions <- data.frame(
+    Variable = c("TARGET_WINS", "TEAM_BATTING_H", "TEAM_BATTING_2B", "TEAM_BATTING_3B",
+                 "TEAM_BATTING_HR", "TEAM_BATTING_BB", "TEAM_BATTING_HBP", "TEAM_BATTING_SO",
+                 "TEAM_BASERUN_SB", "TEAM_BASERUN_CS", "TEAM_FIELDING_E", "TEAM_FIELDING_DP",
+                 "TEAM_PITCHING_BB", "TEAM_PITCHING_H", "TEAM_PITCHING_HR", "TEAM_PITCHING_SO"),
+    Definition = c("Number of wins", 
+                   "Base Hits by batters (1B, 2B, 3B, HR)",
+                   "Doubles by batters (2B)",
+                   "Triples by batters (3B)",
+                   "Homeruns by batters (4B)",
+                   "Walks by batters",
+                   "Batters hit by pitch (get a free base)",
+                   "Strikeouts by batters",
+                   "Stolen bases",
+                   "Caught stealing",
+                   "Errors",
+                   "Double Plays",
+                   "Walks allowed",
+                   "Hits allowed",
+                   "Homeruns allowed",
+                   "Strikeouts by pitchers"),
+    stringsAsFactors = FALSE
+  )
+  
+  #Merge the coefficients table with the variable definitions
+  merged_table <- left_join(coeff_table, var_definitions, by = "Variable")
+  
+  return(merged_table)
+}
+```
+```{r}
+merge_coefficients_with_definitions(forward_coefficients)
+merge_coefficients_with_definitions(backward_coefficients)
+
+```
+
+The majority of the points in the center of the $Q-Q$ plot fall fairly close to the line of $y=x$ indicating that they are normally distributed.However, the divergence of the tails indicates some issues for extreme values.\
+
+```{r R-squared review POLY}
+
+r_squared <- summary(forward_model)$r.squared
+cat("R-squared: ", r_squared, "\n")
+
+qqnorm(residuals(forward_model))
+qqline(residuals(forward_model), col = "red")
+
+
+
+```
+
+The residuals vs. fitted values plot suggests that the model is alright. The good news is that the residuals are generally centered around zero, indicating that the model is unbiased in its predictions across the middle range of fitted values. However, there is evidence of heteroscedasticity, as the residuals show a "fanning out" pattern, with increasing variance at higher fitted values, which may affect prediction reliability in these ranges. In addition, there are a few outliers, particularly targeting teams that have low wins, which could be distorting the model’s accuracy.\ 
+
+
+```{r residuals versus fitted review}
+fitted_vals <- fitted(forward_model)
+residuals_vals <- residuals(forward_model)
+
+plot(fitted_vals, residuals_vals,
+     main = "Residuals vs Fitted",
+     xlab = "Fitted values",
+     ylab = "Residuals")
+abline(h = 0, col = "red")
+
+
+```
+
+
+```{r Predictions with Eval}
+moneyball_evaluation_data <- read.csv("moneyball-evaluation-data.csv")
+moneyball_evaluation_data_imputed <- impute_missing_values(moneyball_evaluation_data,correlation_matrix)
+moneyball_evaluation_data_imputed[moneyball_evaluation_data_imputed == "" | is.na(moneyball_evaluation_data_imputed)] <- 0
+sum(is.na(moneyball_evaluation_data_imputed))
+
+count_na_as_string <- sum(moneyball_evaluation_data_imputed == "NA", na.rm = TRUE)
+moneyball_evaluation_data_imputed[moneyball_evaluation_data_imputed == "NA"] <- 0
+
+#Check for NAs
+sum(is.na(moneyball_evaluation_data_imputed))
+#Predict wins 
+predicted_wins <- predict(forward_model, newdata = moneyball_evaluation_data_imputed)
+moneyball_evaluation_data$Predicted_Wins <- round(predicted_wins)
+#export data
+print(predicted_wins)
+write.csv(moneyball_evaluation_data, "moneyball-evaluation-data-predicted.csv", row.names = FALSE)
+print("Predicted wins saved to 'moneyball-evaluation-data-predicted.csv'")
+
+# #Predict wins using they polynomial regression model using the mice imputed test dataset.
+# sum(is.na(completedData1))
+# predicted_winspoly <- predict(mpoly, newdata = completedData1)
+# completedData1$Predicted_Wins <- round(predicted_winspoly)
+# 
+# #Display the predicted wins
+# print(predicted_winspoly)
+# write.csv(completedData1, "moneyball-evaluation-data-predicted_POLY.csv", row.names = FALSE)
+```
+
+### 2ND BEST FIT: SUMMARY ANALYSIS: Model using APPROACH 3 (POLYNOMIAL From BUILD MODELS section)
+
+The 2nd best fit is our Polynomial Regression Model.One reason why this model may not be higher could be because of the presence of outliers. As an extention of this project in the future, we could remove some of this high leverage outliers and try fitting this model again to see if the adjusted R square is higher than what was observed. For this project, however, this is our 2nd best selection and fit.
+
+The prediction wins have been written out to a data set\ 
+
+Cook's distance measures how and observation influences the overall model or predicted values\
+Studentizided residuals are the residuals divided by their estimated standard deviation \
+Bonferroni test to identify outliers\
+Hat-points identify influential points (have a high impact on the predictor variables)\
+
+```{r R-squared review}
+
+
+r_squaredpoly <- summary(step_back)$r.squared
+cat("R-squared: ", r_squaredpoly, "\n")
+
+qqnorm(residuals(step_back))
+qqline(residuals(step_back), col = "red")
+qqPlot(step_back, id.n=3)
+
+fitted_valspoly <- fitted(step_back)
+residuals_valsply <- residuals(step_back)
+
+plot(fitted_valspoly, residuals_valsply,
+     main = "Residuals vs Fitted step_back regression",
+     xlab = "Fitted values",
+     ylab = "Residuals")
+abline(h = 0, col = "red")
+
+influenceIndexPlot(step_back, id.n=3)
+influencePlot(step_back, id.n=3)
+
+# Get the model residuals
+model_residuals = step_back$residuals
+
+# Plot the result
+hist(model_residuals)
+
+
+
+```
+
+Below, we have used the step_back (polynomial regression model) to fit the test data after imputation.  I noticed on review that the model predicted negative target wins for 1 record. The record has been printed out below. The TEAM_BASERUN_SB for thiS record is 0 on the record. On the model coefficients this is one of the significant predictor variables, therefore, having an outlier such as 0 has had an impact on this record. No other records on the test dataset has -ve Target wins predicted. Maybe the presence of 0 on the significant predictor played a role in the -ve target wins. One way we can avoid running into negative values is to log transform the target variable. Then we would need to convert to actual scale by taking the exponential. Negative Intercept: If the intercept in a linear regression model is negative, it means that the predicted value of Y when X is zero is negative. In this case, the regression line crosses the y-axis below the zero value. Models can predict out of bounds values in this scenario.
+
+
+```{r Predictions with APPROACH 2}
+
+#sTEP 4: Predict wins using they polynomial regression model using the mice imputed test dataset.
+sum(is.na(completedData1))
+predicted_winspoly <- predict(step_back, newdata = completedData1)
+completedData1$Predicted_Wins <- round(predicted_winspoly)
+
+# This record had -ve TARGET WINS
+completedData1[153,]
+
+# Step 3: Display the predicted wins
+print(predicted_winspoly)
+write.csv(completedData1, "moneyball-evaluation-data-predicted_POLY.csv", row.names = FALSE)
+```
+
+
+## References
+
+https://www.mlb.com/stats/
+https://www.jmp.com/en_us/statistics-knowledge-portal/what-is-multiple-regression/mlr-residual-analysis-and-outliers.html
