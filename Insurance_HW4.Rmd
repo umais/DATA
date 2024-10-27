@@ -1,281 +1,911 @@
 ---
 title: "GROUP 2 HW4: Insurance - Data 621 Assignment 4"
 author: 'GROUP 2 MEMBERS: Banu Boopalan, Gregg Maloy, Alexander Moyse, Umais Siddiqui'
-date: "11-12-2024"
+date: "10/26/2024"
 output:
-  html_document:
-    code_folding: hide
-    df_print: paged
-    toc: true
-    toc_float:
-      collapsed: true
-      smooth_scroll: true
-    theme: yeti
-    highlight: pygments
   pdf_document:
-    latex_engine: xelatex
-    df_print: tibble
-    toc: true
-    toc_depth: 2
-  word_document:
-    toc: true
-    toc_depth: '2'
+    toc: TRUE
+    toc_depth: 2 
+  html_document:
+    highlight: pygments
+    number_sections: no
+    theme: flatly
+    toc: yes
+    toc_float: yes
 ---
-<STYLE>
-table {
-    border: 1px solid black;
-}
-th {
-    background-color: rgb(204, 114, 12);
-    color: black;
-    font-weight: bold;
-    padding: 20px 30px;
-}
-tr:nth-child(even) {
-    background-color: rgb(220,220,220);
-}
-tr:nth-child(odd) {
-    background-color: rgb(184, 174, 174);
-    
-}
-</STYLE>
 
-## Assignment Introduction
-
-In this project, we will analyze the data provided by conducting exploratory data analysis (EDA) and building two different models: a multiple linear regression model and a binary logistic regression model. This is necessary because we have two target variables—TARGET_FLAG, a binary variable indicating whether a crash occurred (1) or not (0), and TARGET_AMT, a continuous variable representing the cost associated with a crash. We will carefully select predictor variables to generate the best-performing models for both targets.
-
-We have read in the two datasets, the training and evaluation datasets, which were provided through GitHub.
-
-Our goal is to analyze 8,000 records of customers from an insurance company. After fitting the models to the training data, we will apply them to the evaluation dataset. We will assess the validity and performance of each model, then report the results to identify the model that best fits the data.
-
-Below is an image showing all the variables and their definitions.
-
-![Variable Definitions](variables.png)
-
-
-
-```{r setup}
-knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = FALSE)
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, error=FALSE, warning=FALSE, message=FALSE)
 ```
 
+```{r libraries, include=FALSE}
 
-```{r setup1 }
 
-library(kableExtra)
-library(tidyverse)
+# Libraries
+
+
+library(stringr)
 library(tidyr)
-library(forecast)
-library(cowplot)
-#install.packages("car")
-library(naniar)
-library(Seurat)
-library(skimr)
-library(PerformanceAnalytics)
-library(corrplot)
-library(mice)
-library(ggplot2)
-library(reshape2)
+library(DataExplorer)        
 library(dplyr)
-library(tidyr)
-library(MASS)# For stepAIC (Stepwise selection)
-library(caret)  # For splitting data and cross-validation
+library(visdat)
+library(pROC)
+library(mice)
+library(corrplot)
+library(MASS)
+library(caret)
+library(e1071)
+library(rbin)
+library(bestNormalize)
+library(GGally)
+library(ggplot2)
+library(readr)
+library(reshape2)
+library(purrr)
 library(leaps)
-library(car)
-# Load necessary libraries
-library(VIM)
-library(DataExplorer)
-library(scales)
-library(e1071) 
-library(smotefamily)
-
-
-insurance_training_data <- read.csv("https://raw.githubusercontent.com/umais/DATA/refs/heads/main/insurance_training_data.csv",stringsAsFactors = F,header=TRUE)
-
-insurance_test_data <- read.csv("https://raw.githubusercontent.com/umais/DATA/refs/heads/main/insurance-evaluation-data.csv",stringsAsFactors = F,header=TRUE)
-#knitr::include_graphics("Definition.png")
-
-```
-## Data Exploration {.tabset}
-### Addressing Missing Data: Ensuring Data Integrity for Reliable Analysis
-
-The first step in our analysis will be to address any missing data within the dataset. This is a crucial step because missing values can distort summary statistics, hinder visualizations, and affect the performance of models if not handled properly. By identifying which columns have missing values and assessing their extent, we can decide how to manage them—whether by removing rows or columns, imputing missing values, or applying more advanced techniques. Cleaning the data in this way ensures that the subsequent exploratory data analysis (EDA) and modeling steps are based on complete and accurate data, leading to more reliable and interpretable results.
-
-Explore the Dataset: We will use functions like head(), str(), and summary() to get an overview of your data structure, types, and initial statistics. This helps us identify potential issues early.
-```{r}
-str(insurance_training_data)
-# Get size of the dataset
-dim(insurance_test_data)
-summary(insurance_test_data)
-```
-
-Initial analysis indicates that we have two target variables with data types of integer and numeric. We can use is.na() to check for missing values in these variables. For the predictor and independent variables, some have been identified as integers: KIDSDRIV, AGE, HOMEKIDS, YOJ, TIF, CLAIM_FREQ, and CAR_AGE. Similarly, is.na() will help us identify missing values in these columns. For the remaining predictor variables, we will analyze them one by one to gain a deeper understanding of the data.
-## 'data.frame':    8161 obs. of  26 variables:
-##  $ INDEX      : int  1 2 4 5 6 7 8 11 12 13 ...
-##  $ TARGET_FLAG: int  0 0 0 0 0 1 0 1 1 0 ...
-##  $ TARGET_AMT : num  0 0 0 0 0 ...
-##  $ KIDSDRIV   : int  0 0 0 0 0 0 0 1 0 0 ...
-##  $ AGE        : int  60 43 35 51 50 34 54 37 34 50 ...
-##  $ HOMEKIDS   : int  0 0 1 0 0 1 0 2 0 0 ...
-##  $ YOJ        : int  11 11 10 14 NA 12 NA NA 10 7 ...
-##  $ INCOME     : chr  "$67,349" "$91,449" "$16,039" NA ...
-##  $ PARENT1    : chr  "No" "No" "No" "No" ...
-##  $ HOME_VAL   : chr  "$0" "$257,252" "$124,191" "$306,251" ...
-##  $ MSTATUS    : chr  "z_No" "z_No" "Yes" "Yes" ...
-##  $ SEX        : chr  "M" "M" "z_F" "M" ...
-##  $ EDUCATION  : chr  "PhD" "z_High School" "z_High School" "<High School" ...
-##  $ JOB        : chr  "Professional" "z_Blue Collar" "Clerical" "z_Blue Collar" ...
-##  $ TRAVTIME   : int  14 22 5 32 36 46 33 44 34 48 ...
-##  $ CAR_USE    : chr  "Private" "Commercial" "Private" "Private" ...
-##  $ BLUEBOOK   : chr  "$14,230" "$14,940" "$4,010" "$15,440" ...
-##  $ TIF        : int  11 1 4 7 1 1 1 1 1 7 ...
-##  $ CAR_TYPE   : chr  "Minivan" "Minivan" "z_SUV" "Minivan" ...
-##  $ RED_CAR    : chr  "yes" "yes" "no" "yes" ...
-##  $ OLDCLAIM   : chr  "$4,461" "$0" "$38,690" "$0" ...
-##  $ CLM_FREQ   : int  2 0 2 0 2 0 0 1 0 0 ...
-##  $ REVOKED    : chr  "No" "No" "No" "No" ...
-##  $ MVR_PTS    : int  3 0 3 0 3 0 0 10 0 1 ...
-##  $ CAR_AGE    : int  18 1 10 6 17 7 1 7 1 17 ...
-##  $ URBANICITY : chr  "Highly Urban/ Urban" "Highly Urban/ Urban" "Highly Urban/ Urban" "Highl
-
-```{r}
-
-# Check for missing values in target variables
-missing_target1 <- sum(is.na(insurance_training_data$TARGET_FLAG))
-missing_target2 <- sum(is.na(insurance_training_data$TARGET_AMT))
-
-cat("Missing values in target_variable1:", missing_target1, "\n")
-cat("Missing values in target_variable2:", missing_target2, "\n")
-
-# List of integer predictor variables
-int_predictors <- c("KIDSDRIV", "AGE", "HOMEKIDS","TRAVTIME", "YOJ","MVR_PTS", "TIF", "CLM_FREQ", "CAR_AGE")
-
-# Check for missing values in integer predictors
-missing_ints <- sapply(insurance_training_data[int_predictors], function(x) sum(is.na(x)))
-
-# Print missing values for integer predictors
-cat("Missing values in integer predictors:\n")
-print(missing_ints)
-
-
+# Load necessary package
+library(caTools)
+library(car)  # For VIF
+library(glmnet)
 
 ```
 
 
-Now lets look at the Income Variable it is supposed to be numeric but it is identified as Char here
-```{r}
-
-# Analyze a categorical variable
-Income <- "INCOME"
-
-# Print unique values
-cat("Unique values in", Income, ":\n")
-print(unique(insurance_training_data[[Income]]))
-
-# Subset the data to only include the relevant columns, including income
-# This is optional but can improve efficiency
-# AGE, Education, JOB, CAR_USE,TIF
-#subset_data <- insurance_training_data[, c("INCOME", "other_feature1", "other_feature2", ...)]
-
-# Perform KNN imputation
-#imputed_data <- kNN(subset_data)
-insurance_training_data$INCOME[insurance_training_data$INCOME == ""] <- NA
-
-
-
-missing_income_count <- sum(is.na(insurance_training_data$INCOME))
-cat("Number of missing values in the income column:", missing_income_count, "\n")
-
-```
-
-For now I have just replaced the blank values in INCOME with NA and we will handle that Data Type and Imputation in later steps.\
-
-
-Lets look at the Parent1 field which is suppose to be a simple YES/NO field
-```{r}
-table(insurance_training_data$PARENT1)
-#HOME_VAL
-```
-
-First we will look at the TARGET_FLAG and understand the distribution of the data
-
-```{r}
-table(insurance_training_data$TARGET_FLAG)
-ggplot(insurance_training_data, aes(x = factor(TARGET_FLAG))) + geom_bar()
-
+```{r data}
+# training data
+insurance_training_data <- read.csv('https://raw.githubusercontent.com/umais/DATA/refs/heads/main/insurance_training_data.csv', stringsAsFactors =  FALSE)
+# test data
+insurance_evaluation_data <- read.csv('https://raw.githubusercontent.com/umais/DATA/refs/heads/main/insurance_training_data.csv')
 ```
 
 
-```{r}
-
-#insurance_training_data$TARGET_FLAG <- factor(insurance_training_data$TARGET_FLAG, levels = c(0, 1))
-
-#table(insurance_training_data$TARGET_FLAG_FACTOR)
-
-# Apply SMOTE to the dataset
-#X <- insurance_training_data[, -which(names(insurance_training_data) == "TARGET_FLAG_FACTOR")]
-#target <- insurance_training_data$TARGET_FLAG_FACTOR
-# Apply SMOTE
-#str(X)
-#summary(insurance_training_data)
-# Convert categorical variables to dummy variables
-#insurance_training_data_numeric <- data.frame(model.matrix(~ . - 1, data = insurance_training_data))
-
-# Apply SMOTE after conversion
-#smote_data <- SMOTE(insurance_training_data_numeric[, -which(names(insurance_training_data_numeric) == "TARGET_FLAG")], 
-                  #  insurance_training_data_numeric$TARGET_FLAG)
+# Overview
 
 
+In this assignment, you’ll dive into a rich dataset of approximately 8,000 customer records from an auto insurance company. Each record represents a customer and includes two key response variables:
 
-# Combine the oversampled data with the original data
-#insurance_training_data$TARGET_FLAG_FACTOR <- smote_result$data
+TARGET_FLAG - A binary indicator where a “1” signifies the customer was involved in a car crash, while a “0” means they were not.
+TARGET_AMT - This variable represents the cost incurred in the event of a crash. If there was no crash, this value is zero. If a crash occurred, this variable holds the associated monetary cost, which is greater than zero.
+Your goal is to develop predictive models that provide insights on two fronts:
 
-#table(insurance_training_data$TARGET_FLAG_FACTOR)
+The likelihood of a customer being involved in a car crash (using binary logistic regression).
+The potential cost of a crash, if it occurs (using multiple linear regression).
+For this task, you’ll leverage the variables in the dataset—and any additional variables you derive from them—to create, train, and evaluate your models on a training dataset.
+
+Dataset Variables Overview:
+
+Below, you’ll find a brief description of each variable in the dataset to help guide your exploratory analysis and feature engineering efforts.
+
+## Crash Data Insights
+
+### Target Variables
+
+| **Attribute**     | **Description**                              | **Expected Impact**                                 |
+|-------------------|----------------------------------------------|----------------------------------------------------|
+| TARGET_FLAG       | Indicates if the customer was involved in a crash (1 = Yes, 0 = No) | None at this stage                                 |
+| TARGET_AMT        | Cost incurred in the event of a crash (0 if no crash) | None at this stage                                 |
+
+---
+
+### Predictor Variables
+
+| **Attribute**     | **Description**                              | **Theoretical Influence**                          |
+|-------------------|----------------------------------------------|----------------------------------------------------|
+| AGE               | Driver's age                                 | Young and very old drivers may have higher risks   |
+| BLUEBOOK          | Vehicle market value                         | May affect payout size if a crash occurs           |
+| CAR_AGE           | Vehicle's age                                | Possibly influences payout but unclear on crash likelihood |
+| CAR_TYPE          | Vehicle type                                 | Potential influence on payout if a crash occurs    |
+| CAR_USE           | Vehicle's primary use                        | Commercial usage may increase crash probability    |
+| CLM_FREQ          | Claims made in past 5 years                 | More past claims may predict higher future claims  |
+| EDUCATION         | Highest education level attained            | Higher education might correlate with safer driving|
+| HOMEKIDS          | Number of children at home                  | Impact unknown                                     |
+| HOME_VAL          | Value of home                               | Homeownership could correlate with responsible driving |
+| INCOME            | Annual income                               | Wealthier individuals may experience fewer crashes |
+| JOB               | Employment category                         | White-collar jobs might suggest safer driving      |
+| KIDSDRIV          | Number of young drivers in household        | Teen drivers could increase crash risk             |
+| MSTATUS           | Marital status                              | Married individuals may drive more cautiously      |
+| MVR_PTS           | Points on motor vehicle record              | Higher points suggest increased crash likelihood   |
+| OLDCLAIM          | Cumulative claims in past 5 years           | High past payouts may predict future claims        |
+| PARENT1           | Single-parent household indicator           | Impact unknown                                     |
+| RED_CAR           | Indicator for a red car                     | Potential correlation with risky driving (myth)    |
+| REVOKED           | Past license revocation (in last 7 years)   | Suggests increased risk                            |
+| SEX               | Driver's gender                             | Myth suggests women may experience fewer crashes   |
+| TIF               | Policy duration (years)                     | Long-term policyholders may have safer driving patterns |
+| TRAVTIME          | Commute duration                            | Longer commutes may indicate higher risk           |
+| URBANICITY        | Urban or rural setting                      | Impact unknown                                     |
+| YOJ               | Years in current job                        | Stable employment may suggest safer driving habits |
+
+
+# Data Exploration
+
+
+```{r, overview}
+# Check the structure of the data
+glimpse(insurance_training_data)
 
 ```
-### Imputing Missing Values 
+The dataset includes 8,161 records with 23 feature variables and 2 target variables, providing detailed information on customers and their insurance claims history.
 
-Now that we have some idea about some 
+```{r,head}
+# Display the first few rows and a summary
+head(insurance_training_data)
+summary(insurance_training_data)
+```
 
-```{r}
-# 1. Missing Value Analysis
+On preliminary inspection, we note that several columns contain issues such as incompatible punctuation in financial values, and categorical variables require conversion to factors with clearer labels. 
 
 
 
-# Check the number of missing (NA) values in INCOME
-# Convert empty strings, 0, or other placeholders to NA
-insurance_training_data$INCOME[insurance_training_data$INCOME == "" | insurance_training_data$INCOME == 0] <- NA
+```{r, numeric-vars}
+# Remove an index column if present
+insurance_training_data_clean <- dplyr::select(insurance_training_data, -INDEX)
 
-sum(is.na(insurance_training_data$INCOME))
-# Visualize missing values
-aggr(insurance_training_data, numbers = TRUE, prop = FALSE, col = c('navyblue', 'yellow'))
+# Clean special characters in financial columns
+insurance_training_data_clean$HOME_VAL <- substr(insurance_training_data_clean$HOME_VAL, 2, nchar(insurance_training_data_clean$HOME_VAL)) 
+insurance_training_data_clean$HOME_VAL <- as.numeric(str_remove_all(insurance_training_data_clean$HOME_VAL, "[[:punct:]]"))
 
-# Comment: The `aggr()` function from the VIM package provides a visual representation of missing values. 
-# Here, we can easily identify which columns have missing data and the proportion of missing values.
+insurance_training_data_clean$BLUEBOOK <- substr(insurance_training_data_clean$BLUEBOOK, 2, nchar(insurance_training_data_clean$BLUEBOOK))
+insurance_training_data_clean$BLUEBOOK <- as.numeric(str_remove_all(insurance_training_data_clean$BLUEBOOK, "[[:punct:]]"))
+
+insurance_training_data_clean$INCOME <- substr(insurance_training_data_clean$INCOME, 2, nchar(insurance_training_data_clean$INCOME))
+insurance_training_data_clean$INCOME <- as.numeric(str_remove_all(insurance_training_data_clean$INCOME, "[[:punct:]]"))
+
+insurance_training_data_clean$OLDCLAIM <- substr(insurance_training_data_clean$OLDCLAIM, 2, nchar(insurance_training_data_clean$OLDCLAIM))
+insurance_training_data_clean$OLDCLAIM <- as.numeric(str_remove_all(insurance_training_data_clean$OLDCLAIM, "[[:punct:]]"))
 
 ```
 
-### Data Explorer Report
 
-Data Explorer Report
+```{r, categorical-vars}
+
+# Remove 'z_' prefix from marital status and convert to a factor
+insurance_training_data_clean$MSTATUS <- as.factor(str_remove(insurance_training_data_clean$MSTATUS, 'z_'))
+
+# Remove 'z_' prefix from parental status and convert to a factor
+insurance_training_data_clean$PARENT1 <- as.factor(str_remove(insurance_training_data_clean$PARENT1, 'z_'))
+
+# Replace '<' with 'Less than ' in education level to clarify the meaning
+insurance_training_data_clean$EDUCATION <- str_replace(insurance_training_data_clean$EDUCATION, '<', 'Less than ')
+
+# Remove 'z_' prefix from sex and convert to a factor
+insurance_training_data_clean$SEX <- as.factor(str_remove(insurance_training_data_clean$SEX, 'z_'))
+
+# Remove 'z_' prefix from education level and convert to a factor
+insurance_training_data_clean$EDUCATION <- as.factor(str_remove(insurance_training_data_clean$EDUCATION, 'z_'))
+
+# Recode empty job entries as 'Other Job' to handle missing data
+insurance_training_data_clean$JOB[insurance_training_data_clean$JOB == ""] <- 'Other Job'
+
+# Remove 'z_' prefix from job titles and convert to a factor
+insurance_training_data_clean$JOB <- as.factor(str_remove(insurance_training_data_clean$JOB, 'z_'))
+
+# Remove 'z_' prefix from car usage category and convert to a factor
+insurance_training_data_clean$CAR_USE <- as.factor(str_remove(insurance_training_data_clean$CAR_USE, 'z_'))
+
+# Remove 'z_' prefix from car type and convert to a factor
+insurance_training_data_clean$CAR_TYPE <- as.factor(str_remove(insurance_training_data_clean$CAR_TYPE, 'z_'))
+
+# Remove 'z_' prefix from urbanicity status and convert to a factor
+insurance_training_data_clean$URBANICITY <- as.factor(str_remove(insurance_training_data_clean$URBANICITY, 'z_'))
+
+# Remove 'z_' prefix from revoked status and convert to a factor
+insurance_training_data_clean$REVOKED <- as.factor(str_remove(insurance_training_data_clean$REVOKED, 'z_'))
+
+# Remove 'z_' prefix from red car indicator and convert to a factor
+insurance_training_data_clean$RED_CAR <- as.factor(str_remove(insurance_training_data_clean$RED_CAR, 'z_'))
+
+```
+
+
+```{r, after-fix}
+
+summary(insurance_training_data_clean)
+
+```
+
+
+The updated data frame now comprises only numeric and factor columns. It is observed that the car age variable contains values less than 1, including negative values. These will be replaced with a mode value of 1 to ensure data integrity.
+
+
+```{r, car-age}
+insurance_training_data_clean$CAR_AGE[insurance_training_data_clean$CAR_AGE <1] <- 1
+```
+
+
+## Categorical variables
+
+```{r, levels}
+# Identify categorical columns and store their names in cat_features
+cat_features <- names(insurance_training_data_clean)[map_chr(insurance_training_data_clean, class) == "factor"]
+
+# Display each categorical column and its unique levels
+cat("Exploring Categorical Features:\n")
+walk(cat_features, ~cat("Feature:", ., "\nLevels:", paste(levels(insurance_training_data_clean[[.]]), collapse = ", "), "\n\n"))
+
+
+```
+
+Upon examining the categorical variables, it is observed that the majority of the columns are binary in nature.
+
+The following graphs illustrate the distribution of all categorical predictors.
+
+```{r, cat-bar, fig.length =20, fig.width=10}
+
+# Select categorical features from the cleaned insurance training data
+categorical_data <- insurance_training_data_clean[cat_features]
+
+# Melt the data frame to create a long format suitable for ggplot
+melted_data <- melt(categorical_data, measure.vars = cat_features, variable.name = 'category', value.name = 'category_value')
+
+# Create a bar plot to visualize the distribution of categorical predictors
+ggplot(melted_data, aes(x = category_value)) + 
+  geom_bar(aes(fill = category_value)) + 
+  scale_fill_brewer(palette = "Set1") + 
+  facet_wrap(~ category, nrow = 5L, scales = 'free') + 
+  coord_flip() +
+  labs(title = "Distribution of Categorical Predictors", 
+       x = "Category Value", 
+       y = "Count") +
+  theme_minimal()
+```
+
+
+
+## Numeric Variables
+
+The following two graphs illustrate the distribution of the numeric variables in our dataset. The first set of histograms, represented in red, displays the distributions on a normal scale, while the second set, depicted in blue, presents the distributions on a log10 scale. Notably, many numeric variables exhibit a mode value of zero, which may warrant further investigation.
+
+```{r, histograms}
+plot_histogram(insurance_training_data_clean, geom_histogram_args = list("fill" = "tomato4"))
+
+
+```
+
+
+
+
+```{r, log10-hist}
+plot_histogram(insurance_training_data_clean, scale_x = "log10", geom_histogram_args = list("fill" = "royalblue4"))
+
+```
+
+## Assessment of Incomplete Data
+
+
+This section identifies columns within the dataset that contain missing values, denoted as NA:
+
+
+```{r,missing-val}
+# Summarize the dataset to check for columns with missing values
+insurance_training_data_clean %>% 
+  summarise_all(funs(sum(is.na(.)))) %>% 
+  select_if(~any(.) > 0)
+
+```
+
+
+```{r, plot-miss, fig.width=10, fig.length=10}
+# Visualize the missing values in the dataset to understand their distribution
+plot_missing(insurance_training_data_clean)
+
+```
+
+
+
+
+```{r, missing-values}
+
+# Calculate and display the proportion of missing values for each column
+round(colSums(is.na(insurance_training_data_clean)) / nrow(insurance_training_data_clean), 3)
+
+# Visualize specific columns to further investigate missing data patterns
+vis_dat(insurance_training_data_clean %>% dplyr::select(YOJ, INCOME, HOME_VAL, CAR_AGE))
+
+
+
+```
+
+The analysis reveals that five variables contain missing values. However, there does not appear to be a discernible pattern associated with these missing entries, which suggests they are likely missing at random (MAR). This conclusion allows us to proceed with standard imputation techniques or analyses without significant concern regarding bias introduced by the missing data.
+
+## Handling Missing Values And Correlation Analysis
+
+Multiple Imputation by Chained Equations (MICE) is a powerful method for handling missing data, as it generates multiple complete datasets by predicting missing values based on other available data. This method accounts for uncertainty in the imputations and allows for more reliable statistical inference.
+
+```{r, corrplot}
+
+# Select numeric columns for correlation analysis
+numeric_data <- insurance_training_data_clean[, c('TARGET_AMT', 'AGE', 'YOJ', 'INCOME', 'HOME_VAL', 'TRAVTIME', 'BLUEBOOK', 'TIF', 'OLDCLAIM', 'CLM_FREQ', 'MVR_PTS', 'CAR_AGE')]
+
+
+# Document missing values before imputation
+missing_summary_before <- colSums(is.na(numeric_data))
+print("Missing Values Before Imputation:")
+print(missing_summary_before)
+
+# Perform multiple imputation
+imputed_data <- mice(numeric_data, m = 5, method = 'pmm', seed = 123) # Predictive Mean Matching
+
+# Create a complete dataset by averaging the multiple imputations
+completed_data <- complete(imputed_data)
+
+# Document missing values after imputation
+missing_summary_after <- colSums(is.na(completed_data))
+print("Missing Values After Imputation:")
+print(missing_summary_after)
+
+# Generate a correlation matrix and plot it
+corrplot(cor(completed_data), type = "upper")
+
+
+# Sensitivity Analysis
+# Compare correlations from original data (complete case analysis) vs. imputed data
+
+# Complete case analysis (removing rows with NA values)
+complete_case_data <- na.omit(numeric_data)
+cor_complete_case <- cor(complete_case_data)
+
+# Correlation of imputed data
+cor_imputed <- cor(completed_data)
+
+# Print correlation matrices for comparison
+print("Correlation Matrix for Complete Case Analysis:")
+print(cor_complete_case)
+
+print("Correlation Matrix for Imputed Data:")
+print(cor_imputed)
+
+# Visualize the difference in correlations
+cor_diff <- cor_imputed - cor_complete_case
+ggplot(melt(cor_diff), aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", limit = c(-1, 1), name="Correlation Difference") +
+  theme_minimal() +
+  labs(title = "Difference in Correlation between Imputed and Complete Case Data", x = "Variables", y = "Variables") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+After completing the data, we have calculated the correlation matrix on the fully imputed dataset. This provides a more accurate representation of the relationships between variables without the bias that could be introduced by simple imputation methods.
+
+It is evident that there are notable positive correlations among the following variables:
+
+Income and Home Value
+Income and Bluebook Value
+Income and Car Age
+Claim Frequency and Old Claims
+Claim Frequency and MVR Points
+
+The heatmap provides a visual representation of the differences in correlations between the imputed data and complete case data, helping to understand the impact of the missing data handling method.
+
+# Data Preparation for Multiple Linear Regression
+
+
+## Removing TARGET_FLAG
+Since, for multiple linear regression our objective is to predict the monetary amount of how much it will cost in the event of a crash, we will exclude the TARGET_FLAG variable from our analysis.
+
+```{r remove-target-flag}
+crash_data <- subset(filter(insurance_training_data_clean,TARGET_FLAG==1),select = -c(TARGET_FLAG))
+
+```
+
+## Handling Missing Data - Multiple Linear Regression
+
+Before proceeding with imputation, let's assess the missing values in our dataset. We will then handle the missing data using multiple imputation, which is a more robust method than simply replacing missing values with the median.
+
+```{r fix-nulls}
+# Check for missing values before imputation
+missing_summary_before <- colSums(is.na(crash_data))
+print("Missing Values Before Imputation:")
+print(missing_summary_before)
+
+
+
+# Impute missing values
+imputed_data <- mice(crash_data, m = 5, method = 'pmm', seed = 123) # Predictive Mean Matching
+crash_data_imputed <- complete(imputed_data)
+
+
+
+# Check for missing values after imputation
+missing_summary_after <- colSums(is.na(crash_data_imputed))
+print("Missing Values After Imputation:")
+print(missing_summary_after)
+
+```
+
+
+## Transformatiions - Multiple Linear Regression
+
+We will be performing transformations and create histograms for several variables, which helps visualize the effect of the transformations on data distribution. Here's a breakdown of how these transformations aid in model building and potential outcomes:
+
+###Handling Skewness:
+
+Many of these variables (e.g., INCOME, HOME_VAL, OLDCLAIM) may be right-skewed due to outliers or a large range of values. Transformations like log, square root, and Yeo-Johnson help normalize the distribution, reducing skewness.
+Normalized distributions (closer to normal) are beneficial for regression-based models, as they assume linear relationships and normally distributed residuals.
+
+###Improving Model Fit:
+
+Log and Square Root transformations compress the range of values, which can make the data easier for linear models to handle. For instance, high-income values may dominate the predictive power of INCOME if not transformed.
+Box-Cox and Yeo-Johnson transformations (which automatically choose an optimal transformation) can help produce more linearly related predictors, which improves linear regression model accuracy.
+
+###Comparing the Effect of Transformations:
+
+Creating side-by-side histograms allows you to compare the original and transformed distributions. This visual analysis is important for selecting the transformation that brings the distribution closest to normality, which can ultimately improve the performance and interpretability of the model.
+
+###Categorizing Continuous Variables:
+
+The cut function is used to create binned categories for TIF (Years with Policy) and MVR_PTS (Driving Record Points), which converts continuous variables into categorical bins. This is useful if there are distinct groups within the data that are meaningful (e.g., "Less than 1 year" in TIF).
+Using Transformed Variables for Modeling
+After determining the most effective transformation for each variable, we can replace the original variables with the transformed ones in our model. However, it’s also useful to keep both versions to allow for comparison in model performance. Here’s how to proceed with this:
+
+r
+```{r}
+# Create a histogram and density plot for the AGE variable
+ggplot(crash_data_imputed, aes(x = AGE)) +
+  geom_histogram(binwidth = 1, fill = "lightblue", color = "black", alpha = 0.7) +
+  geom_density(aes(y = ..count.. * 1), fill = "lightgreen", alpha = 0.5) +
+  labs(title = "Distribution of AGE", x = "AGE", y = "Frequency") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Create a histogram for the INCOME variable
+ggplot(data = crash_data_imputed, aes(x = INCOME)) +
+    geom_histogram(bins = 30, fill = "lightblue", color = "black") +
+    labs(title = "Distribution of INCOME",
+         x = "Income",
+         y = "Frequency") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))  # Center the title
+
+
+# Create a histogram for the HOME_VAL variable
+ggplot(data = crash_data_imputed, aes(x = HOME_VAL)) +
+    geom_histogram(bins = 30, fill = "lightcoral", color = "black") +
+    labs(title = "Distribution of HOME_VAL",
+         x = "Home Value",
+         y = "Frequency") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))  # Center the title
+
+# Create a histogram for the CAR_AGE variable
+ggplot(data = crash_data_imputed, aes(x = CAR_AGE)) +
+    geom_histogram(bins = 30, fill = "lightblue", color = "black") +
+    labs(title = "Distribution of CAR_AGE",
+         x = "Car Age",
+         y = "Frequency") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))  # Center the title
+
+# Create a histogram for the BLUEBOOK variable
+ggplot(data = crash_data_imputed, aes(x = BLUEBOOK)) +
+    geom_histogram(bins = 30, fill = "lightgreen", color = "black") +
+    labs(title = "Distribution of BLUEBOOK",
+         x = "Blue Book Value",
+         y = "Frequency") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))  # Center the title
+
+# Create a histogram for the OLDCLAIM variable
+ggplot(data = crash_data_imputed, aes(x = OLDCLAIM)) +
+    geom_histogram(bins = 30, fill = "lightcoral", color = "black") +
+    labs(title = "Distribution of OLDCLAIM",
+         x = "Old Claim Amount",
+         y = "Frequency") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))  # Center the title
+
+# Create a histogram for the TRAVTIME variable
+ggplot(data = crash_data_imputed, aes(x = TRAVTIME)) +
+    geom_histogram(bins = 30, fill = "lightsalmon", color = "black") +
+    labs(title = "Distribution of TRAVTIME",
+         x = "Travel Time",
+         y = "Frequency") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))  # Center the title
+# Histogram for TIF (Number of Years with Policy)
+ggplot(data = crash_data_imputed, aes(x = TIF)) +
+    geom_histogram(bins = 30, fill = "lightblue", color = "black") +
+    labs(title = "Distribution of TIF (Number of Years with Policy)",
+         x = "Years with Policy (TIF)",
+         y = "Frequency") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))  # Center the title
+
+# Histogram for MVR_PTS (Driving Record Points)
+ggplot(data = crash_data_imputed, aes(x = MVR_PTS)) +
+    geom_histogram(bins = 30, fill = "lightgreen", color = "black") +
+    labs(title = "Distribution of MVR_PTS (Driving Record Points)",
+         x = "Driving Record Points (MVR_PTS)",
+         y = "Frequency") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))  # Center the title
+
+# Example variable to transform
+home_val_variable <- crash_data_imputed$HOME_VAL  # Replace with your actual variable
+
+# 1. Log Transformation
+home_val_log_transformed <- log(home_val_variable + 1)  # Add 1 to handle zeros
+
+# 2. Square Root Transformation
+home_val_sqrt_transformed <- sqrt(home_val_variable+ 1)  # Add 1 to handle zeros
+
+# 3. Box-Cox Transformation
+home_val_box_cox_transformed <- boxcox(home_val_variable + 1)  # Add 1 to handle zeros, need to extract lambda
+
+home_val_yj_transformed <- bestNormalize(home_val_variable, method = "yeo.johnson")$x.t
+
+# 5. Inverse Transformation
+inverse_transformed <- 1 / (home_val_variable + 1)  # Add 1 to handle zeros
+
+# Check the results with histograms
+par(mfrow=c(2,2))  # Set up the plotting area
+hist(home_val_variable, main="Original", xlab="HOME_VAL")
+hist(home_val_log_transformed, main="Log Transformed", xlab="Log(HOME_VAL)")
+hist(home_val_sqrt_transformed, main="Square Root Transformed", xlab="Sqrt(HOME_VAL)")
+hist(home_val_yj_transformed, main="Yeo-Johnson Transformed", xlab="Yeo-Johnson(HOME_VAL)")
+
+
+# Example variable to transform
+age_variable <- crash_data_imputed$AGE  # Replace with your actual variable
+
+# 1. Log Transformation
+age_log_transformed <- log(age_variable + 1)  # Add 1 to handle zeros
+
+# 2. Square Root Transformation
+age_sqrt_transformed <- sqrt(age_variable + 1)  # Add 1 to handle zeros
+
+# 3. Box-Cox Transformation
+age_box_cox_transformed <- boxcox(age_variable + 1)  # Add 1 to handle zeros, need to extract lambda
+
+age_yj_transformed <- bestNormalize(age_variable, method = "yeo.johnson")$x.t
+
+# 5. Inverse Transformation
+inverse_transformed <- 1 / (age_variable + 1)  # Add 1 to handle zeros
+
+# Check the results with histograms
+par(mfrow=c(2,2))  # Set up the plotting area
+hist(age_variable, main="Original", xlab="AGE")
+hist(age_log_transformed, main="Log Transformed", xlab="Log(AGE)")
+hist(age_sqrt_transformed, main="Square Root Transformed", xlab="Sqrt(AGE)")
+hist(age_yj_transformed, main="Yeo-Johnson Transformed", xlab="Yeo-Johnson(AGE)")
+
+
+# Example variable to transform
+income_variable <- crash_data_imputed$INCOME  # Replace with your actual variable
+
+# 1. Log Transformation
+income_log_transformed <- log(income_variable + 1)  # Add 1 to handle zeros
+
+# 2. Square Root Transformation
+income_sqrt_transformed <- sqrt(income_variable + 1)  # Add 1 to handle zeros
+
+# 3. Box-Cox Transformation
+income_box_cox_transformed <- boxcox(income_variable + 1)  # Add 1 to handle zeros, need to extract lambda
+
+income_yj_transformed <- bestNormalize(income_variable, method = "yeo.johnson")$x.t
+
+# 5. Inverse Transformation
+inverse_transformed <- 1 / (income_variable + 1)  # Add 1 to handle zeros
+
+# Check the results with histograms
+par(mfrow=c(2,2))  # Set up the plotting area
+hist(income_variable, main="Original", xlab="INCOME")
+hist(income_log_transformed, main="Log Transformed", xlab="Log(INCOME)")
+hist(income_sqrt_transformed, main="Square Root Transformed", xlab="Sqrt(INCOME)")
+hist(income_yj_transformed, main="Yeo-Johnson Transformed", xlab="Yeo-Johnson(INCOME)")
+
+
+#OldClaim
+
+
+oldclaim_variable <- crash_data_imputed$OLDCLAIM  # Replace with your actual variable
+
+oldclaim_log_transformed <- log(oldclaim_variable + 1)  # Add 1 to handle zeros
+
+# 2. Square Root Transformation
+oldclaim_sqrt_transformed <- sqrt(oldclaim_variable + 1)  # Add 1 to handle zeros
+
+# 3. Box-Cox Transformation
+oldclaim_box_cox_transformed <- boxcox(oldclaim_variable + 1)  # Add 1 to handle zeros, need to extract lambda
+
+oldclaim_yj_transformed <- bestNormalize(oldclaim_variable, method = "yeo.johnson")$x.t
+
+# 5. Inverse Transformation
+inverse_transformed <- 1 / (oldclaim_variable + 1)  # Add 1 to handle zeros
+
+# Check the results with histograms
+par(mfrow=c(2,2))  # Set up the plotting area
+hist(oldclaim_variable, main="Original", xlab="oldclaim")
+hist(oldclaim_log_transformed, main="Log Transformed", xlab="Log(oldclaim)")
+hist(oldclaim_sqrt_transformed, main="Square Root Transformed", xlab="Sqrt(oldclaim)")
+hist(oldclaim_yj_transformed, main="Yeo-Johnson Transformed", xlab="Yeo-Johnson(oldclaim)")
+
+# CAR AGE
+car_age_variable <- crash_data_imputed$CAR_AGE # Replace with your actual variable
+
+car_age_log_transformed <- log(car_age_variable + 1)  # Add 1 to handle zeros
+
+# 2. Square Root Transformation
+car_age_sqrt_transformed <- sqrt(car_age_variable + 1)  # Add 1 to handle zeros
+
+# 3. Box-Cox Transformation
+car_age_box_cox_transformed <- boxcox(car_age_variable + 1)  # Add 1 to handle zeros, need to extract lambda
+
+car_age_yj_transformed <- bestNormalize(car_age_variable, method = "yeo.johnson")$x.t
+
+# 5. Inverse Transformation
+inverse_transformed <- 1 / (car_age_variable + 1)  # Add 1 to handle zeros
+
+# Check the results with histograms
+par(mfrow=c(2,2))  # Set up the plotting area
+hist(car_age_variable, main="Original", xlab="CAR_AGE")
+hist(car_age_log_transformed, main="Log Transformed", xlab="Log(CAR_AGE)")
+hist(car_age_sqrt_transformed, main="Square Root Transformed", xlab="Sqrt(CAR_AGE)")
+hist(car_age_yj_transformed, main="Yeo-Johnson Transformed", xlab="Yeo-Johnson(CAR_AGE)")
+
+
+#TRAVTIME TRANSFORMATIONS
+
+TRAVTIME_variable <- crash_data_imputed$TRAVTIME # Replace with your actual variable
+
+TRAVTIME_log_transformed <- log(TRAVTIME_variable + 1)  # Add 1 to handle zeros
+
+# 2. Square Root Transformation
+TRAVTIME_sqrt_transformed <- sqrt(TRAVTIME_variable + 1)  # Add 1 to handle zeros
+
+# 3. Box-Cox Transformation
+TRAVTIME_box_cox_transformed <- boxcox(TRAVTIME_variable + 1)  # Add 1 to handle zeros, need to extract lambda
+
+TRAVTIME_yj_transformed <- bestNormalize(TRAVTIME_variable, method = "yeo.johnson")$x.t
+
+# 5. Inverse Transformation
+inverse_transformed <- 1 / (TRAVTIME_variable + 1)  # Add 1 to handle zeros
+
+# Check the results with histograms
+par(mfrow=c(2,2))  # Set up the plotting area
+hist(TRAVTIME_variable, main="Original", xlab="TRAVTIME")
+hist(TRAVTIME_log_transformed, main="Log Transformed", xlab="Log(TRAVTIME)")
+hist(TRAVTIME_sqrt_transformed, main="Square Root Transformed", xlab="Sqrt(TRAVTIME)")
+hist(TRAVTIME_yj_transformed, main="Yeo-Johnson Transformed", xlab="Yeo-Johnson(TRAVTIME)")
+
+#TIF
+
+TIF_variable <- crash_data_imputed$TIF # Replace with your actual variable
+
+TIF_log_transformed <- log(TIF_variable + 1)  # Add 1 to handle zeros
+
+# 2. Square Root Transformation
+TIF_sqrt_transformed <- sqrt(TIF_variable + 1)  # Add 1 to handle zeros
+
+# 3. Box-Cox Transformation
+TIF_box_cox_transformed <- boxcox(TIF_variable + 1)  # Add 1 to handle zeros, need to extract lambda
+
+TIF_yj_transformed <- bestNormalize(TIF_variable, method = "yeo.johnson")$x.t
+
+# 5. Inverse Transformation
+inverse_transformed <- 1 / (TIF_variable + 1)  # Add 1 to handle zeros
+
+# Check the results with histograms
+par(mfrow=c(2,2))  # Set up the plotting area
+hist(TIF_variable, main="Original", xlab="TIF")
+hist(TIF_log_transformed, main="Log Transformed", xlab="Log(TIF)")
+hist(TIF_sqrt_transformed, main="Square Root Transformed", xlab="Sqrt(TIF)")
+hist(TIF_yj_transformed, main="Yeo-Johnson Transformed", xlab="Yeo-Johnson(TIF)")
+
+#MVR_PTS TRANSFORMATIONS
+
+MVR_PTS_variable <- crash_data_imputed$MVR_PTS # Replace with your actual variable
+
+MVR_PTS_log_transformed <- log(MVR_PTS_variable + 1)  # Add 1 to handle zeros
+
+# 2. Square Root Transformation
+MVR_PTS_sqrt_transformed <- sqrt(MVR_PTS_variable + 1)  # Add 1 to handle zeros
+
+# 3. Box-Cox Transformation
+MVR_PTS_box_cox_transformed <- boxcox(MVR_PTS_variable + 1)  # Add 1 to handle zeros, need to extract lambda
+
+MVR_PTS_yj_transformed <- bestNormalize(MVR_PTS_variable, method = "yeo.johnson")$x.t
+
+# 5. Inverse Transformation
+inverse_transformed <- 1 / (MVR_PTS_variable + 1)  # Add 1 to handle zeros
+
+# Check the results with histograms
+par(mfrow=c(2,2))  # Set up the plotting area
+hist(MVR_PTS_variable, main="Original", xlab="MVR_PTS")
+hist(MVR_PTS_log_transformed, main="Log Transformed", xlab="Log(MVR_PTS)")
+hist(MVR_PTS_sqrt_transformed, main="Square Root Transformed", xlab="Sqrt(MVR_PTS)")
+hist(MVR_PTS_yj_transformed, main="Yeo-Johnson Transformed", xlab="Yeo-Johnson(MVR_PTS)")
+
+crash_data_imputed_transformed <- crash_data_imputed %>%
+    mutate(
+                # Log transformation of AGE
+        INCOME_transformed = bestNormalize(INCOME, method = "yeo.johnson")$x.t,      # Log transformation of INCOME
+        CAR_AGE_transformed = sqrt(CAR_AGE + 1),  # Square root transformation of CAR_AGE
+        HOME_VAL_transformed = sqrt(HOME_VAL + 1),   # Log transformation of HOME_VAL
+        OLDCLAIM_transformed=bestNormalize(oldclaim_variable, method = "yeo.johnson")$x.t,
+        TRAVTIME_transformed=sqrt(TRAVTIME + 1)
+
+        )
+```
+
+
+# Build Models
+
+## Multiple Linear Regression
+### Model 1
+
+### Fitting a linear regression model with transformed variables
+```{r}
+
+
+# Set seed for reproducibility
+set.seed(123)  # You can set any number
+
+# Create a split index
+split <- sample.split(crash_data$TARGET_AMT, SplitRatio = 0.7)
+
+# Split data into training and testing sets
+train_data <- subset(crash_data, split == TRUE)
+test_data <- subset(crash_data, split == FALSE)
+
+# Fit the model on the training data
+model <- lm(TARGET_AMT ~ ., data = train_data)
+summary(model)
+
+# Predict on the testing data
+predictions <- predict(model, newdata = test_data)
+
+# Evaluate model performance
+# Calculate Mean Absolute Error (MAE)
+MAE <- mean(abs(predictions - test_data$TARGET_AMT))
+
+# Calculate Mean Squared Error (MSE)
+MSE <- mean((predictions - test_data$TARGET_AMT)^2)
+
+# Calculate Root Mean Squared Error (RMSE)
+RMSE <- sqrt(MSE)
+
+# Print the performance metrics
+cat("Model Performance on Testing Data:\n")
+cat("Mean Absolute Error (MAE):", MAE, "\n")
+cat("Mean Squared Error (MSE):", MSE, "\n")
+cat("Root Mean Squared Error (RMSE):", RMSE, "\n")
+
+```
+
+### Model 2
+
 
 ```{r}
-# 2. Data Distribution Analysis
-# Create a report of the data using DataExplorer
-#create_report(insurance_test_data)
 
-# Comment: The `create_report()` function gives a comprehensive overview of the dataset, including distributions, 
-# summary statistics, and visualizations for each variable.
 
-# 3. Summary Statistics for Continuous Variables
-summary_stats <- insurance_test_data %>%
-  summarise(
-    Mean_AGE = mean(AGE, na.rm = TRUE),
-    Median_AGE = median(AGE, na.rm = TRUE),
-    SD_AGE = sd(AGE, na.rm = TRUE),
-    Mean_INCOME = mean(INCOME, na.rm = TRUE),
-    Median_INCOME = median(INCOME, na.rm = TRUE),
-    SD_INCOME = sd(INCOME, na.rm = TRUE)
-  )
 
-print(summary_stats)
+# Set seed for reproducibility
+set.seed(123)  # You can set any number
+
+# Create a split index
+split <- sample.split(completed_data$TARGET_AMT, SplitRatio = 0.7)
+
+# Split data into training and testing sets
+train_data <- subset(completed_data, split == TRUE)
+test_data <- subset(completed_data, split == FALSE)
+
+# Fit the model on the training data
+model <- lm(TARGET_AMT ~ ., data = train_data)
+summary(model)
+
+# Predict on the testing data
+predictions <- predict(model, newdata = test_data)
+
+# Evaluate model performance
+# Calculate Mean Absolute Error (MAE)
+MAE <- mean(abs(predictions - test_data$TARGET_AMT))
+
+# Calculate Mean Squared Error (MSE)
+MSE <- mean((predictions - test_data$TARGET_AMT)^2)
+
+# Calculate Root Mean Squared Error (RMSE)
+RMSE <- sqrt(MSE)
+
+# Print the performance metrics
+cat("Model Performance on Testing Data:\n")
+cat("Mean Absolute Error (MAE):", MAE, "\n")
+cat("Mean Squared Error (MSE):", MSE, "\n")
+cat("Root Mean Squared Error (RMSE):", RMSE, "\n")
+
+```
+
+
+
+
+### Model 3
+
+```{r}
+
+# Feature Engineering: Transformations and Interaction Terms
+train_data$log_income <- log(train_data$INCOME + 1)
+train_data$log_car_age <- log(train_data$CAR_AGE + 1)
+train_data$income_car_age_interaction <- train_data$INCOME * train_data$CAR_AGE
+
+test_data$log_income <- log(test_data$INCOME + 1)
+test_data$log_car_age <- log(test_data$CAR_AGE + 1)
+test_data$income_car_age_interaction <- test_data$INCOME * test_data$CAR_AGE
+
+# Optional: Scaling if predictors have large variances
+preproc <- preProcess(train_data, method = c("center", "scale"))
+train_data_scaled <- predict(preproc, train_data)
+test_data_scaled <- predict(preproc, test_data)
+
+# Step 1: Fit the initial model on the training data
+initial_model <- lm(TARGET_AMT ~ ., data = train_data_scaled)
+summary(initial_model)
+
+# Check for multicollinearity
+vif_values <- car::vif(initial_model)
+print(vif_values)
+
+# Step 2: Remove high VIF variables if any are >5
+high_vif_vars <- names(vif_values[vif_values > 5])
+train_data_reduced <- train_data_scaled[, !(names(train_data_scaled) %in% high_vif_vars)]
+test_data_reduced <- test_data_scaled[, !(names(test_data_scaled) %in% high_vif_vars)]
+
+# Step 3: Fit a regularized model (Lasso) on the reduced data
+x_train <- model.matrix(TARGET_AMT ~ ., data = train_data_reduced)[, -1]
+y_train <- train_data_reduced$TARGET_AMT
+lasso_cv <- cv.glmnet(x_train, y_train, alpha = 1)
+best_lambda <- lasso_cv$lambda.min
+
+final_lasso_model <- glmnet(x_train, y_train, alpha = 1, lambda = best_lambda)
+print(final_lasso_model)
+
+# Predictions on the test set
+x_test <- model.matrix(TARGET_AMT ~ ., data = test_data_reduced)[, -1]
+predictions <- predict(final_lasso_model, newx = x_test)
+
+# Evaluate Model Performance
+MAE <- mean(abs(predictions - test_data_reduced$TARGET_AMT))
+MSE <- mean((predictions - test_data_reduced$TARGET_AMT)^2)
+RMSE <- sqrt(MSE)
+
+# Print performance metrics
+cat("Model Performance on Testing Data:\n")
+cat("Mean Absolute Error (MAE):", MAE, "\n")
+cat("Mean Squared Error (MSE):", MSE, "\n")
+cat("Root Mean Squared Error (RMSE):", RMSE, "\n")
+
+
+```
+
+
+
+
+## Binary Logistic Regression
+### Model 1
+### Model 2
+### Model 3
+### Model 4
+### Model 5
+### Model 6
+### Model 7
+
+# Select Models & Prediction
+
+## Multiple Linear Regression Selection
+Third model (with residual standard error: 0.983 and significantly lower MAE, MSE, and RMSE values on the test set). Here’s why:
+
+Lower Error Metrics: The first model’s error metrics (MAE, MSE, RMSE) are substantially lower than those of the other models, suggesting that its predictions are closer to the actual values on the test data.
+
+Residual Standard Error (RSE): The third model has an RSE of 0.983 compared to the second model's RSE of 5218, indicating tighter residuals, which implies better model fit if both models are evaluated on the same response scale.
+
+F-statistic and R-squared: Both models have similar F-statistics and R-squared values, so there’s no distinct advantage for one model over the other in terms of explained variance. However, the significantly lower error metrics of the first model make it the better choice overall for predictive accuracy.
+
+
+## Binary Logistic Regression Selection
+
+
+## Prediction
+
+# Code Appendix
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
 ```
