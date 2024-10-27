@@ -47,6 +47,7 @@ library(leaps)
 library(caTools)
 library(car)  # For VIF
 library(glmnet)
+library(caTools)
 
 ```
 
@@ -55,11 +56,15 @@ library(glmnet)
 # training data
 insurance_training_data <- read.csv('https://raw.githubusercontent.com/umais/DATA/refs/heads/main/insurance_training_data.csv', stringsAsFactors =  FALSE)
 # test data
-insurance_evaluation_data <- read.csv('https://raw.githubusercontent.com/umais/DATA/refs/heads/main/insurance_training_data.csv')
+insurance_evaluation_data <- read.csv('https://raw.githubusercontent.com/umais/DATA/refs/heads/main/insurance-evaluation-data.csv')
 ```
 
 
-# Overview
+
+
+# Data Exploration
+
+## Overview
 
 
 In this assignment, you’ll dive into a rich dataset of approximately 8,000 customer records from an auto insurance company. Each record represents a customer and includes two key response variables:
@@ -72,11 +77,12 @@ The likelihood of a customer being involved in a car crash (using binary logisti
 The potential cost of a crash, if it occurs (using multiple linear regression).
 For this task, you’ll leverage the variables in the dataset—and any additional variables you derive from them—to create, train, and evaluate your models on a training dataset.
 
-Dataset Variables Overview:
 
-Below, you’ll find a brief description of each variable in the dataset to help guide your exploratory analysis and feature engineering efforts.
 
 ## Crash Data Insights
+
+### Dataset Variables Overview:
+This table outlines key attributes in our insurance dataset, detailing both the target variables and the predictor variables, along with their expected impacts on insurance outcomes. We aldo find a brief description of each variable in the dataset to help guide your exploratory analysis and feature engineering efforts.
 
 ### Target Variables
 
@@ -116,15 +122,17 @@ Below, you’ll find a brief description of each variable in the dataset to help
 | YOJ               | Years in current job                        | Stable employment may suggest safer driving habits |
 
 
-# Data Exploration
 
+
+The dataset includes 8,161 records with 23 feature variables and 2 target variables, providing detailed information on customers and their insurance claims history.
+
+On preliminary inspection, we note that several columns contain issues such as incompatible punctuation in financial values, and categorical variables require conversion to factors with clearer labels. 
 
 ```{r, overview}
 # Check the structure of the data
 glimpse(insurance_training_data)
 
 ```
-The dataset includes 8,161 records with 23 feature variables and 2 target variables, providing detailed information on customers and their insurance claims history.
 
 ```{r,head}
 # Display the first few rows and a summary
@@ -132,7 +140,7 @@ head(insurance_training_data)
 summary(insurance_training_data)
 ```
 
-On preliminary inspection, we note that several columns contain issues such as incompatible punctuation in financial values, and categorical variables require conversion to factors with clearer labels. 
+
 
 
 
@@ -211,6 +219,65 @@ The updated data frame now comprises only numeric and factor columns. It is obse
 insurance_training_data_clean$CAR_AGE[insurance_training_data_clean$CAR_AGE <1] <- 1
 ```
 
+
+```{r}
+
+insurance_evaluation_data_clean <- dplyr::select(insurance_evaluation_data, -INDEX)
+insurance_evaluation_data_clean$HOME_VAL <- substr(insurance_evaluation_data_clean$HOME_VAL, 2, nchar(insurance_evaluation_data_clean$HOME_VAL)) 
+insurance_evaluation_data_clean$HOME_VAL <- as.numeric(str_remove_all(insurance_evaluation_data_clean$HOME_VAL, "[[:punct:]]"))
+
+insurance_evaluation_data_clean$BLUEBOOK <- substr(insurance_evaluation_data_clean$BLUEBOOK, 2, nchar(insurance_evaluation_data_clean$BLUEBOOK))
+insurance_evaluation_data_clean$BLUEBOOK <- as.numeric(str_remove_all(insurance_evaluation_data_clean$BLUEBOOK, "[[:punct:]]"))
+
+insurance_evaluation_data_clean$INCOME <- substr(insurance_evaluation_data_clean$INCOME, 2, nchar(insurance_evaluation_data_clean$INCOME))
+insurance_evaluation_data_clean$INCOME <- as.numeric(str_remove_all(insurance_evaluation_data_clean$INCOME, "[[:punct:]]"))
+
+insurance_evaluation_data_clean$OLDCLAIM <- substr(insurance_evaluation_data_clean$OLDCLAIM, 2, nchar(insurance_evaluation_data_clean$OLDCLAIM))
+insurance_evaluation_data_clean$OLDCLAIM <- as.numeric(str_remove_all(insurance_evaluation_data_clean$OLDCLAIM, "[[:punct:]]"))
+
+# Remove 'z_' prefix from marital status and convert to a factor
+insurance_evaluation_data_clean$MSTATUS <- as.factor(str_remove(insurance_evaluation_data_clean$MSTATUS, 'z_'))
+
+# Remove 'z_' prefix from parental status and convert to a factor
+insurance_evaluation_data_clean$PARENT1 <- as.factor(str_remove(insurance_evaluation_data_clean$PARENT1, 'z_'))
+
+# Replace '<' with 'Less than ' in education level to clarify the meaning
+insurance_evaluation_data_clean$EDUCATION <- str_replace(insurance_evaluation_data_clean$EDUCATION, '<', 'Less than ')
+
+# Remove 'z_' prefix from sex and convert to a factor
+insurance_evaluation_data_clean$SEX <- as.factor(str_remove(insurance_evaluation_data_clean$SEX, 'z_'))
+
+# Remove 'z_' prefix from education level and convert to a factor
+insurance_evaluation_data_clean$EDUCATION <- as.factor(str_remove(insurance_evaluation_data_clean$EDUCATION, 'z_'))
+
+# Recode empty job entries as 'Other Job' to handle missing data
+insurance_evaluation_data_clean$JOB[insurance_evaluation_data_clean$JOB == ""] <- 'Other Job'
+
+# Remove 'z_' prefix from job titles and convert to a factor
+insurance_evaluation_data_clean$JOB <- as.factor(str_remove(insurance_evaluation_data_clean$JOB, 'z_'))
+
+# Remove 'z_' prefix from car usage category and convert to a factor
+insurance_evaluation_data_clean$CAR_USE <- as.factor(str_remove(insurance_evaluation_data_clean$CAR_USE, 'z_'))
+
+# Remove 'z_' prefix from car type and convert to a factor
+insurance_evaluation_data_clean$CAR_TYPE <- as.factor(str_remove(insurance_evaluation_data_clean$CAR_TYPE, 'z_'))
+
+# Remove 'z_' prefix from urbanicity status and convert to a factor
+insurance_evaluation_data_clean$URBANICITY <- as.factor(str_remove(insurance_evaluation_data_clean$URBANICITY, 'z_'))
+
+# Remove 'z_' prefix from revoked status and convert to a factor
+insurance_evaluation_data_clean$REVOKED <- as.factor(str_remove(insurance_evaluation_data_clean$REVOKED, 'z_'))
+
+# Remove 'z_' prefix from red car indicator and convert to a factor
+insurance_evaluation_data_clean$RED_CAR <- as.factor(str_remove(insurance_evaluation_data_clean$RED_CAR, 'z_'))
+
+
+
+insurance_evaluation_data_clean$CAR_AGE[insurance_evaluation_data_clean$CAR_AGE <1] <- 1
+
+
+
+```
 
 ## Categorical variables
 
@@ -316,6 +383,7 @@ Multiple Imputation by Chained Equations (MICE) is a powerful method for handlin
 # Select numeric columns for correlation analysis
 numeric_data <- insurance_training_data_clean[, c('TARGET_AMT', 'AGE', 'YOJ', 'INCOME', 'HOME_VAL', 'TRAVTIME', 'BLUEBOOK', 'TIF', 'OLDCLAIM', 'CLM_FREQ', 'MVR_PTS', 'CAR_AGE')]
 
+numeric_data_eval <- insurance_evaluation_data_clean[, c('TARGET_AMT', 'AGE', 'YOJ', 'INCOME', 'HOME_VAL', 'TRAVTIME', 'BLUEBOOK', 'TIF', 'OLDCLAIM', 'CLM_FREQ', 'MVR_PTS', 'CAR_AGE')]
 
 # Document missing values before imputation
 missing_summary_before <- colSums(is.na(numeric_data))
@@ -328,6 +396,8 @@ imputed_data <- mice(numeric_data, m = 5, method = 'pmm', seed = 123) # Predicti
 # Create a complete dataset by averaging the multiple imputations
 completed_data <- complete(imputed_data)
 
+imputed_data_eval<- mice(numeric_data_eval, m = 5, method = 'pmm', seed = 123) # Predictive Mean Matching
+completed_data_eval <- complete(imputed_data_eval)
 # Document missing values after imputation
 missing_summary_after <- colSums(is.na(completed_data))
 print("Missing Values After Imputation:")
@@ -411,6 +481,8 @@ missing_summary_after <- colSums(is.na(crash_data_imputed))
 print("Missing Values After Imputation:")
 print(missing_summary_after)
 
+crash_data_imputed <- na.omit(crash_data_imputed)
+
 ```
 
 
@@ -418,21 +490,21 @@ print(missing_summary_after)
 
 We will be performing transformations and create histograms for several variables, which helps visualize the effect of the transformations on data distribution. Here's a breakdown of how these transformations aid in model building and potential outcomes:
 
-###Handling Skewness:
+### Handling Skewness:
 
 Many of these variables (e.g., INCOME, HOME_VAL, OLDCLAIM) may be right-skewed due to outliers or a large range of values. Transformations like log, square root, and Yeo-Johnson help normalize the distribution, reducing skewness.
 Normalized distributions (closer to normal) are beneficial for regression-based models, as they assume linear relationships and normally distributed residuals.
 
-###Improving Model Fit:
+### Improving Model Fit:
 
 Log and Square Root transformations compress the range of values, which can make the data easier for linear models to handle. For instance, high-income values may dominate the predictive power of INCOME if not transformed.
 Box-Cox and Yeo-Johnson transformations (which automatically choose an optimal transformation) can help produce more linearly related predictors, which improves linear regression model accuracy.
 
-###Comparing the Effect of Transformations:
+### Comparing the Effect of Transformations:
 
 Creating side-by-side histograms allows you to compare the original and transformed distributions. This visual analysis is important for selecting the transformation that brings the distribution closest to normality, which can ultimately improve the performance and interpretability of the model.
 
-###Categorizing Continuous Variables:
+### Categorizing Continuous Variables:
 
 The cut function is used to create binned categories for TIF (Years with Policy) and MVR_PTS (Driving Record Points), which converts continuous variables into categorical bins. This is useful if there are distinct groups within the data that are meaningful (e.g., "Less than 1 year" in TIF).
 Using Transformed Variables for Modeling
@@ -734,6 +806,16 @@ crash_data_imputed_transformed <- crash_data_imputed %>%
 ## Multiple Linear Regression
 ### Model 1
 
+I am choosing OLDCLAIM, CLM_FREQ, MVR_PTS, and TRAVTIME based on their potential relevance to accurately estimating TARGET_AMT, reflecting key factors associated with claims risk, customer behavior, and exposure. Here’s why each predictor is chosen:
+
+OLDCLAIM: This variable likely captures historical claim amounts, which can be indicative of a customer’s risk profile and claim tendencies. Including past claims can help predict future claims or costs, especially if there’s a pattern of high claims.
+
+CLM_FREQ: Claim frequency directly indicates how often a customer has filed claims. High claim frequency often correlates with increased future claims risk, making it an essential variable for understanding claim cost patterns.
+
+MVR_PTS: Motor Vehicle Record (MVR) points typically reflect a driver’s record of traffic violations or accidents. Higher MVR points generally correspond to higher risk profiles, making this variable crucial for predicting future claims and associated costs.
+
+TRAVTIME: The time a customer spends traveling, TRAVTIME, can be a proxy for exposure to risk (e.g., more time on the road increases accident likelihood). Including this variable helps account for the time-related risk factor in claims prediction.
+
 ### Fitting a linear regression model with transformed variables
 ```{r}
 
@@ -742,14 +824,14 @@ crash_data_imputed_transformed <- crash_data_imputed %>%
 set.seed(123)  # You can set any number
 
 # Create a split index
-split <- sample.split(crash_data$TARGET_AMT, SplitRatio = 0.7)
+split <- sample.split(crash_data_imputed_transformed$TARGET_AMT, SplitRatio = 0.7)
 
 # Split data into training and testing sets
-train_data <- subset(crash_data, split == TRUE)
-test_data <- subset(crash_data, split == FALSE)
+train_data <- subset(crash_data_imputed_transformed, split == TRUE)
+test_data <- subset(crash_data_imputed_transformed, split == FALSE)
 
 # Fit the model on the training data
-model <- lm(TARGET_AMT ~ ., data = train_data)
+model <- lm(TARGET_AMT ~ train_data$OLDCLAIM_transformed + train_data$CLM_FREQ + train_data$MVR_PTS + train_data$TRAVTIME_transformed, data = train_data)
 summary(model)
 
 # Predict on the testing data
@@ -773,8 +855,12 @@ cat("Root Mean Squared Error (RMSE):", RMSE, "\n")
 
 ```
 
+As we can see this model does not provide a meaningful fit for the data and shows large prediction errors. Consider alternative predictors or transformations, adding interaction terms, or using a different modeling approach, as the current variables are likely insufficient for capturing the patterns in the outcome.
+
+
 ### Model 2
 
+I will take a straightforward approach by utilizing the variables as they are, applying only basic data cleaning and ensuring the data is complete.  
 
 ```{r}
 
@@ -787,11 +873,11 @@ set.seed(123)  # You can set any number
 split <- sample.split(completed_data$TARGET_AMT, SplitRatio = 0.7)
 
 # Split data into training and testing sets
-train_data <- subset(completed_data, split == TRUE)
-test_data <- subset(completed_data, split == FALSE)
+train_data <- subset(completed_data , split == TRUE)
+test_data <- subset(completed_data , split == FALSE)
 
 # Fit the model on the training data
-model <- lm(TARGET_AMT ~ ., data = train_data)
+model <- lm(TARGET_AMT ~ train_data$OLDCLAIM + train_data$CLM_FREQ + train_data$MVR_PTS + train_data$TRAVTIME, data = train_data)
 summary(model)
 
 # Predict on the testing data
@@ -815,95 +901,396 @@ cat("Root Mean Squared Error (RMSE):", RMSE, "\n")
 
 ```
 
-
+The second model performs substantially better than the first across all metrics. The inclusion of statistically significant predictors (CLM_FREQ, MVR_PTS, TRAVTIME) improves both the fit and prediction accuracy, making it a more suitable model for forecasting purposes. However, the relatively low R-squared value suggests that additional variables or model refinement could further enhance performance.
 
 
 ### Model 3
 
 ```{r}
 
-# Feature Engineering: Transformations and Interaction Terms
-train_data$log_income <- log(train_data$INCOME + 1)
-train_data$log_car_age <- log(train_data$CAR_AGE + 1)
-train_data$income_car_age_interaction <- train_data$INCOME * train_data$CAR_AGE
+# Transform skewed predictors and target
+train_data$TARGET_AMT_log <- log(train_data$TARGET_AMT + 1)  # Log transformation to stabilize variance
+train_data$TRAVTIME_sqrt <- sqrt(train_data$TRAVTIME)  # Square root transformation for TRAVTIME
 
-test_data$log_income <- log(test_data$INCOME + 1)
-test_data$log_car_age <- log(test_data$CAR_AGE + 1)
-test_data$income_car_age_interaction <- test_data$INCOME * test_data$CAR_AGE
 
-# Optional: Scaling if predictors have large variances
-preproc <- preProcess(train_data, method = c("center", "scale"))
-train_data_scaled <- predict(preproc, train_data)
-test_data_scaled <- predict(preproc, test_data)
+enhanced_model <- lm(
+  TARGET_AMT_log ~ train_data$CLM_FREQ + train_data$MVR_PTS + train_data$TRAVTIME_sqrt +
+    I(train_data$MVR_PTS^2) + train_data$CLM_FREQ:train_data$MVR_PTS,  # Interaction and polynomial terms
+  data = train_data
+)
 
-# Step 1: Fit the initial model on the training data
-initial_model <- lm(TARGET_AMT ~ ., data = train_data_scaled)
-summary(initial_model)
+# Model Summary
+summary(enhanced_model)
 
-# Check for multicollinearity
-vif_values <- car::vif(initial_model)
-print(vif_values)
+# Model Performance on Testing Data
+predictions <- predict(enhanced_model, newdata = test_data)
+# Convert predictions back if log-transformed
+predictions <- exp(predictions) - 1  
 
-# Step 2: Remove high VIF variables if any are >5
-high_vif_vars <- names(vif_values[vif_values > 5])
-train_data_reduced <- train_data_scaled[, !(names(train_data_scaled) %in% high_vif_vars)]
-test_data_reduced <- test_data_scaled[, !(names(test_data_scaled) %in% high_vif_vars)]
+# Calculate Performance Metrics
+mae <- mean(abs(predictions - test_data$TARGET_AMT))
+mse <- mean((predictions - test_data$TARGET_AMT)^2)
+rmse <- sqrt(mse)
 
-# Step 3: Fit a regularized model (Lasso) on the reduced data
-x_train <- model.matrix(TARGET_AMT ~ ., data = train_data_reduced)[, -1]
-y_train <- train_data_reduced$TARGET_AMT
-lasso_cv <- cv.glmnet(x_train, y_train, alpha = 1)
-best_lambda <- lasso_cv$lambda.min
+list(MAE = mae, MSE = mse, RMSE = rmse)
+```
 
-final_lasso_model <- glmnet(x_train, y_train, alpha = 1, lambda = best_lambda)
-print(final_lasso_model)
+### Significance of Predictors:
 
-# Predictions on the test set
-x_test <- model.matrix(TARGET_AMT ~ ., data = test_data_reduced)[, -1]
-predictions <- predict(final_lasso_model, newx = x_test)
+All predictors are statistically significant (p < 0.01), with high t-values and low p-values, confirming that each variable contributes meaningfully to the model.
+Interaction Term (CLM_FREQ:MVR_PTS) and Polynomial Term (MVR_PTS^2) have significant coefficients, capturing more complex relationships between variables, which the previous model lacked.
+Model Fit (R-Squared and Adjusted R-Squared):
 
-# Evaluate Model Performance
-MAE <- mean(abs(predictions - test_data_reduced$TARGET_AMT))
-MSE <- mean((predictions - test_data_reduced$TARGET_AMT)^2)
-RMSE <- sqrt(MSE)
+Previous Model: R-squared = 0.02557, adjusted R-squared = 0.02494.
+Updated Model: R-squared = 0.08821, adjusted R-squared = 0.08747.
+Interpretation: This model explains about 8.8% of the variance, compared to only 2.5% in the previous model. While R-squared is still low, this is a clear improvement.
+Residual Standard Error (RSE):
 
-# Print performance metrics
-cat("Model Performance on Testing Data:\n")
-cat("Mean Absolute Error (MAE):", MAE, "\n")
-cat("Mean Squared Error (MSE):", MSE, "\n")
-cat("Root Mean Squared Error (RMSE):", RMSE, "\n")
+Previous Model: RSE = 5243.
+Updated Model: RSE = 3.713 (on log scale).
+Interpretation: The reduced residual error indicates this model fits closer to actual values, aligning with improved R-squared and adjusted R-squared.
+Performance Metrics on Testing Data:
 
+Previous Model: MAE = 1916.528, MSE = 4,578,380, RMSE = 2139.715.
+Updated Model: MAE = 428.3723, MSE = 2,311,025, RMSE = 1520.206.
+Interpretation: Lower MAE, MSE, and RMSE values show the updated model is substantially more accurate in predictions, achieving almost a 30% reduction in RMSE.
+
+
+### Model 4
+
+```{r}
+# Set seed for reproducibility
+
+
+
+enhanced_model <- lm(
+    TARGET_AMT_log ~ train_data$CLM_FREQ + train_data$MVR_PTS + train_data$TRAVTIME_sqrt +  
+       I(train_data$MVR_PTS^2) + train_data$CLM_FREQ:train_data$MVR_PTS + train_data$CLM_FREQ:train_data$TRAVTIME_sqrt + train_data$MVR_PTS:train_data$TRAVTIME_sqrt,
+  data = train_data,
+  weights = ifelse(train_data$CLM_FREQ > 2, 1.5, 1) 
+)
+
+   
+# Model Summary
+summary(enhanced_model)
+
+# Model Performance on Testing Data
+predictions <- predict(enhanced_model, newdata = test_data)
+# Convert predictions back if log-transformed
+predictions <- exp(predictions) - 1  
+
+# Calculate Performance Metrics
+mae <- mean(abs(predictions - test_data$TARGET_AMT))
+mse <- mean((predictions - test_data$TARGET_AMT)^2)
+rmse <- sqrt(mse)
+
+list(MAE = mae, MSE = mse, RMSE = rmse)
+```
+
+### Model 5
+
+```{r}
+# Set seed for reproducibility
+
+
+
+enhanced_model <- lm(
+    TARGET_AMT_log ~ train_data$CLM_FREQ + train_data$MVR_PTS + train_data$YOJ + train_data$TIF+
+       I(train_data$MVR_PTS^2) + train_data$CLM_FREQ:train_data$MVR_PTS + train_data$CLM_FREQ:train_data$TRAVTIME_sqrt +  train_data$MVR_PTS:train_data$TRAVTIME_sqrt,
+  data = train_data,
+  weights = ifelse(train_data$CLM_FREQ > 2, 1.5, 1) 
+)
+
+   
+# Model Summary
+summary(enhanced_model)
+
+# Model Performance on Testing Data
+predictions <- predict(enhanced_model, newdata = test_data)
+# Convert predictions back if log-transformed
+predictions <- exp(predictions) - 1  
+
+# Calculate Performance Metrics
+mae <- mean(abs(predictions - test_data$TARGET_AMT))
+mse <- mean((predictions - test_data$TARGET_AMT)^2)
+rmse <- sqrt(mse)
+
+list(MAE = mae, MSE = mse, RMSE = rmse)
+```
+
+
+
+### Summary
+This model captures more complexity and explains a greater portion of the variance in TARGET_AMT_log, particularly due to added interaction terms and the significance of YOJ and TIF. However, further improvements could be explored by:
+
+Potentially removing predictors with high p-values.
+Refining interactions based on residual analysis or testing transformations on specific terms.
+Overall, this model represents a notable improvement, with reduced prediction error and enhanced significance of variables contributing meaningfully to target predictions.
+
+
+## Binary Logistic Regression
+
+
+### Model 1
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Split data into training and testing sets
+split <- sample.split(insurance_training_data_clean$TARGET_FLAG, SplitRatio = 0.7)
+train_data <- subset(insurance_training_data_clean, split == TRUE)
+test_data <- subset(insurance_training_data_clean, split == FALSE)
+
+# Build a logistic regression model with specified predictors
+# Replace predictor1, predictor2, ... with actual predictor names
+logistic_model1 <- glm(TARGET_FLAG ~ AGE + CAR_USE + CLM_FREQ + EDUCATION + 
+                      MVR_PTS + REVOKED + TIF + TRAVTIME + URBANICITY, 
+                      data = insurance_training_data_clean, family = binomial)
+
+# Summary of the model
+summary(logistic_model1)
+
+# Predict on the test set
+# Predict probabilities
+prob_predictions <- predict(logistic_model1, newdata = test_data, type = "response")
+
+# Convert probabilities to binary classes with a threshold (e.g., 0.5)
+class_predictions <- ifelse(prob_predictions > 0.5, 1, 0)
+
+# Evaluate model performance
+# Confusion Matrix
+confusion_matrix <- table(Predicted = class_predictions, Actual = test_data$TARGET_FLAG)
+print(confusion_matrix)
+
+# Calculate accuracy
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+cat("Model Accuracy:", accuracy, "\n")
 
 ```
 
 
 
-
-## Binary Logistic Regression
-### Model 1
 ### Model 2
+
+```{r}
+# Check for missing values
+# Check for missing values
+missing_values <- colSums(is.na(insurance_training_data_clean))
+print(missing_values[missing_values > 0])  # Print columns with missing values
+
+# Option 1: Remove rows with missing values
+insurance_training_data_clean <- na.omit(insurance_training_data_clean)
+
+# Option 2: Impute missing values (mean for numeric columns, mode for categorical, etc.)
+# For numeric columns
+numeric_cols <- sapply(insurance_training_data_clean, is.numeric)
+insurance_training_data_clean[numeric_cols] <- lapply(insurance_training_data_clean[numeric_cols], 
+                                                        function(x) ifelse(is.na(x), mean(x, na.rm = TRUE), x))
+
+# For categorical columns (optional, if you have any)
+categorical_cols <- sapply(insurance_training_data_clean, is.factor)
+insurance_training_data_clean[categorical_cols] <- lapply(insurance_training_data_clean[categorical_cols], 
+                                                           function(x) ifelse(is.na(x), 
+                                                                              levels(x)[which.max(table(x))], 
+                                                                              x))
+
+# Now you can fit your model again
+logistic_model <- glm(TARGET_FLAG ~ AGE + CAR_USE + CLM_FREQ + EDUCATION + 
+                      MVR_PTS + REVOKED + TIF + TRAVTIME + URBANICITY, 
+                      data = insurance_training_data_clean, family = binomial)
+
+# Display summary of the model
+summary(logistic_model)
+
+
+
+# Stepwise feature selection to refine predictors
+logistic_model_step <- stepAIC(logistic_model, direction = "both")
+summary(logistic_model_step)
+
+# Calculate VIF
+vif_values <- vif(logistic_model)
+print(vif_values)
+
+# Remove predictors with high VIF
+high_vif <- names(vif_values[vif_values > 5])  # Threshold for multicollinearity
+if (length(high_vif) > 0) {
+  # Fit a new model excluding high VIF predictors
+  reduced_model <- update(logistic_model, . ~ . - one_of(high_vif))
+  summary(reduced_model)
+}
+
+# Make predictions
+predictions <- predict(logistic_model_step, newdata = insurance_training_data_clean, type = "response")
+predicted_classes <- ifelse(predictions > 0.5, 1, 0)
+
+# Confusion Matrix
+confusion_matrix <- table(insurance_training_data_clean$TARGET_FLAG, predicted_classes)
+print(confusion_matrix)
+
+# Accuracy, Precision, Recall
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+precision <- confusion_matrix[2, 2] / (confusion_matrix[2, 2] + confusion_matrix[1, 2])
+recall <- confusion_matrix[2, 2] / (confusion_matrix[2, 2] + confusion_matrix[2, 1])
+
+cat("Accuracy:", accuracy, "\n")
+cat("Precision:", precision, "\n")
+cat("Recall:", recall, "\n")
+
+# ROC curve and AUC
+
+roc_curve <- roc(insurance_training_data_clean$TARGET_FLAG, predictions)
+plot(roc_curve)
+cat("AUC:", auc(roc_curve), "\n")
+
+
+# Create a trainControl object
+control <- trainControl(method = "cv", number = 10)
+
+# Train the model using cross-validation
+cv_model <- train(TARGET_FLAG ~ ., data = insurance_training_data_clean, method = "glm", family = "binomial", trControl = control)
+print(cv_model)
+
+
+
+```
 ### Model 3
-### Model 4
-### Model 5
-### Model 6
-### Model 7
+
+```{r}
+
+# Data Cleaning: Remove rows with missing values
+insurance_training_data_clean <- na.omit(insurance_training_data_clean)
+
+# Identify numeric columns excluding TARGET_FLAG for scaling
+numeric_cols <- sapply(insurance_training_data_clean, is.numeric)
+numeric_cols <- names(numeric_cols[numeric_cols])  
+numeric_cols <- setdiff(numeric_cols, "TARGET_FLAG") 
+
+# Scale numeric predictors
+insurance_training_data_clean[numeric_cols] <- scale(insurance_training_data_clean[numeric_cols])
+
+# Fit a binary logistic regression model with different predictors
+logistic_model <- glm(TARGET_FLAG ~ CAR_TYPE + HOME_VAL + KIDSDRIV + OLDCLAIM + SEX,
+                      data = insurance_training_data_clean, family = binomial)
+
+# Display summary of the model
+summary(logistic_model)
+
+# Optional: Stepwise feature selection
+logistic_model_step <- stepAIC(logistic_model, direction = "both")
+summary(logistic_model_step)
+
+# Predictions and accuracy
+predicted_probs <- predict(logistic_model, type = "response")
+predicted_classes <- ifelse(predicted_probs > 0.5, 1, 0)
+
+# Create a confusion matrix
+confusion_matrix <- table(insurance_training_data_clean$TARGET_FLAG, predicted_classes)
+print(confusion_matrix)
+
+# Calculate accuracy
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+cat("Model Accuracy:", accuracy, "\n")
+```
+
 
 # Select Models & Prediction
 
 ## Multiple Linear Regression Selection
-Third model (with residual standard error: 0.983 and significantly lower MAE, MSE, and RMSE values on the test set). Here’s why:
-
-Lower Error Metrics: The first model’s error metrics (MAE, MSE, RMSE) are substantially lower than those of the other models, suggesting that its predictions are closer to the actual values on the test data.
-
-Residual Standard Error (RSE): The third model has an RSE of 0.983 compared to the second model's RSE of 5218, indicating tighter residuals, which implies better model fit if both models are evaluated on the same response scale.
-
-F-statistic and R-squared: Both models have similar F-statistics and R-squared values, so there’s no distinct advantage for one model over the other in terms of explained variance. However, the significantly lower error metrics of the first model make it the better choice overall for predictive accuracy.
 
 
-## Binary Logistic Regression Selection
+### Model 5 Fit (R-Squared and Adjusted R-Squared):
 
+R-squared: 0.09877, Adjusted R-squared: 0.09746.
+Interpretation: While still modest, this R-squared value is higher than earlier models, indicating that more variance in the target variable is being explained.
+Significance of Predictors:
+
+Several predictors, including CLM_FREQ, YOJ, TIF, and I(MVR_PTS^2), as well as interactions like CLM_FREQ:MVR_PTS, are highly significant (p < 0.01).
+The inclusion of YOJ (Years of Job) and TIF (Tenure in Force) has contributed significantly to model fit, likely adding valuable information about risk factors.
+However, predictors like TRAVTIME_sqrt and CLM_FREQ:TRAVTIME_sqrt show higher p-values, which might indicate minimal contribution.
+Residual Standard Error (RSE):
+
+Residual standard error: 3.834 on 6160 degrees of freedom.
+Interpretation: The RSE value suggests a reasonable fit, though there is room for further reduction if possible, by tuning or adjusting predictors.
+Performance Metrics on Testing Data:
+
+Mean Absolute Error (MAE): 429.8454
+Mean Squared Error (MSE): 2,121,458
+Root Mean Squared Error (RMSE): 1,456.523
+Interpretation: This model has slightly lower MAE and RMSE than the previous one, indicating better predictive accuracy on test data.
+
+
+## Binary Logistic Regression Model Selection
+
+Model 1 stands out due to its combination of higher accuracy and the inclusion of several significant predictors, despite its higher AIC compared to Model 2. This suggests that while Model 2 fits well with fewer predictors, Model 1 provides a more comprehensive understanding of the factors influencing the target variable.
+
+Select Model 1 for its better accuracy and significant predictors.
+Consider Model 2 as a more parsimonious alternative if simplicity is preferred without a substantial loss in accuracy.
 
 ## Prediction
+
+
+### Prediction Multiple Linear Regression (Model 3)
+```{r}
+completed_data_eval$TARGET_AMT <- mean(train_data$TARGET_AMT)
+completed_data_eval$TARGET_AMT_log <- log(completed_data_eval$TARGET_AMT + 1)  # Log transformation to stabilize variance
+completed_data_eval$TRAVTIME_sqrt <- sqrt(completed_data_eval$TRAVTIME)  # Square root transformation for TRAVTIME
+
+
+
+
+enhanced_model <- lm(
+    TARGET_AMT_log ~ completed_data_eval$CLM_FREQ + completed_data_eval$MVR_PTS + completed_data_eval$YOJ + completed_data_eval$TIF+
+       I(completed_data_eval$MVR_PTS^2) + completed_data_eval$CLM_FREQ:completed_data_eval$MVR_PTS + completed_data_eval$CLM_FREQ:completed_data_eval$TRAVTIME_sqrt +  completed_data_eval$MVR_PTS:completed_data_eval$TRAVTIME_sqrt,
+  data = completed_data_eval,
+  weights = ifelse(completed_data_eval$CLM_FREQ > 2, 1.5, 1) 
+)
+
+#crash_data_imputed <- complete(imputed_data)
+predictions <- predict(enhanced_model, newdata = completed_data_eval)
+# Convert predictions back if log-transformed
+predictions <- exp(predictions) - 1 
+summary(enhanced_model)
+# Calculate Performance Metrics
+mae <- mean(abs(predictions - test_data$TARGET_AMT))
+mse <- mean((predictions - test_data$TARGET_AMT)^2)
+rmse <- sqrt(mse)
+
+list(MAE = mae, MSE = mse, RMSE = rmse)
+
+
+```
+
+
+### Prediction Binary Logistic Regression (Model 1)
+
+```{r}
+prob_predictions <- predict(logistic_model1, newdata = insurance_evaluation_data_clean, type = "response")
+class_predictions <- ifelse(prob_predictions > 0.5, 1, 0)
+table(class_predictions )
+
+```
+
+### Conclusion
+
+In conclusion, we explored various modeling approaches using the insurance dataset, employing both Linear Regression and Binary Logistic Regression techniques. Through a systematic process of feature engineering, variable transformation, and model selection, we developed multiple models tailored to the predictors we identified as significant. After careful evaluation of each model's performance metrics, we selected the most suitable models that demonstrated the best fit for our data. The results of these models, including key coefficients and predictive accuracy, are presented above, providing valuable insights into the factors influencing insurance outcomes. This comprehensive analysis highlights the effectiveness of our modeling strategies in understanding and predicting insurance-related variables.
+
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
 
 # Code Appendix
 
